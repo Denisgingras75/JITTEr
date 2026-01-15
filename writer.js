@@ -17,7 +17,18 @@ let passport = {
     level: "Novice",
     firstUsed: null,
     lastUsed: null,
-    sessionsCompleted: 0
+    sessionsCompleted: 0,
+    // Activity tracking
+    dailyStats: {},
+    hourlyPattern: new Array(24).fill(0),
+    sessionHistory: { lengths: [], timestamps: [] },
+    avgSessionLength: 0,
+    longestSession: 0,
+    sessionLengthVariance: 0,
+    avgDailyKeys: 0,
+    dailyVariance: 0,
+    suspicionScore: 0,
+    suspicionSignals: []
 };
 let session = { humanChars: 0, alienChars: 0, startTime: Date.now() };
 
@@ -103,6 +114,12 @@ function handleKey(e) {
         session.humanChars++;
         passport.totalKeystrokes++;
         passport.lastUsed = Date.now();
+
+        // Update activity patterns
+        if (typeof PassportUtils !== 'undefined') {
+            PassportUtils.updatePassport(passport, 1, false);
+        }
+
         updatePassportLevel();
         chrome.storage.local.set({ passport: passport });
         updateDashboard();
@@ -226,7 +243,7 @@ function resetSession() {
     }
 }
 
-function exportBadge() {
+async function exportBadge() {
     if (bio.isBot) { alert("Verification Denied: Rhythm indicates synthetic origin."); return; }
 
     const editor = document.getElementById('editor');
@@ -235,7 +252,7 @@ function exportBadge() {
 
     const sessionTotal = session.humanChars + session.alienChars;
     const purity = sessionTotal > 0 ? Math.round((session.humanChars / sessionTotal) * 100) : 100;
-    
+
     let integrity = 100;
     if (textLength > 0) integrity = Math.round((session.humanChars / textLength) * 100);
     if (integrity > 100) integrity = 100;
@@ -243,16 +260,32 @@ function exportBadge() {
     // Increment sessions completed
     passport.sessionsCompleted++;
     passport.lastUsed = Date.now();
-    chrome.storage.local.set({ passport: passport });
+
+    // Record this session in passport history
+    if (typeof PassportUtils !== 'undefined') {
+        PassportUtils.updatePassport(passport, session.humanChars, true);
+    }
 
     // Calculate account age in days
     const accountAgeDays = passport.firstUsed ?
         Math.floor((Date.now() - passport.firstUsed) / (1000 * 60 * 60 * 24)) : 0;
 
-    // Payload includes Cognitive Ratio (CR) + Passport Data
+    // Get cryptographic components
+    let signature = null;
+    let publicKeyFingerprint = null;
+    let previousBadgeHash = null;
+
+    if (typeof CryptoUtils !== 'undefined') {
+        publicKeyFingerprint = await CryptoUtils.getPublicKeyFingerprint();
+        previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
+    }
+
+    // Payload includes Cognitive Ratio (CR) + Passport Data + Crypto
     const payload = {
+        version: '2.0',
         type: 'project',
         title: 'Jitter Doc',
+        timestamp: Date.now(),
         purity: purity,
         integrity: integrity,
         keys: session.humanChars,
@@ -264,11 +297,31 @@ function exportBadge() {
         passport: passport.totalKeystrokes,
         passportLevel: passport.level,
         accountAge: accountAgeDays,
-        sessions: passport.sessionsCompleted
+        sessions: passport.sessionsCompleted,
+        avgDailyKeys: passport.avgDailyKeys || 0,
+        suspicionScore: passport.suspicionScore || 0,
+        // Crypto chain
+        previousBadge: previousBadgeHash,
+        publicKeyId: publicKeyFingerprint
     };
-    
+
+    // Sign the payload
+    if (typeof CryptoUtils !== 'undefined') {
+        signature = await CryptoUtils.signBadge(payload);
+        if (signature) {
+            payload.signature = signature;
+        }
+    }
+
+    chrome.storage.local.set({ passport: passport });
+
     const base64 = btoa(JSON.stringify(payload));
     const blockID = base64.slice(-6).toUpperCase();
+
+    // Store badge hash for next badge's chain
+    if (typeof CryptoUtils !== 'undefined') {
+        await CryptoUtils.storeBadgeHash(base64);
+    }
     
     const url = `#jitter:${base64}`;
     const htmlBadge = `<a href="${url}" style="text-decoration:none;" data-jitter-payload="${base64}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${blockID}</span></a>`;
