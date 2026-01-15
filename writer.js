@@ -45,14 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
         editor.addEventListener('input', updateDashboard);
         editor.addEventListener('click', () => { bio.navigates++; updateDashboard(); });
     }
-    
+
     // UI Bindings
     const btnExport = document.getElementById('btn-export');
     const btnReset = document.getElementById('btn-reset');
     if(btnExport) btnExport.addEventListener('click', exportBadge);
     if(btnReset) btnReset.addEventListener('click', resetSession);
-    
+
     setupToolbar();
+    setupAuthHandlers();
 });
 
 function handleKey(e) {
@@ -269,6 +270,18 @@ function exportBadge() {
         btn.innerText = "COPIED!";
         setTimeout(() => btn.innerText = old, 2000);
     });
+
+    // Auto-sync to cloud if logged in
+    if (typeof AuthUtils !== 'undefined') {
+        const status = AuthUtils.getSyncStatus();
+        if (status.isLoggedIn) {
+            AuthUtils.syncToCloud(passport).then(result => {
+                if (result.success) {
+                    console.log('Auto-synced passport to cloud');
+                }
+            }).catch(err => console.error('Auto-sync failed:', err));
+        }
+    }
 }
 
 function setupToolbar() {
@@ -286,4 +299,51 @@ function setupToolbar() {
     const ed = document.getElementById('editor');
     if(fSelect && ed) fSelect.addEventListener('change', (e) => { ed.className = ed.className.replace(/font-\w+/, '') + ' ' + e.target.value; });
     if(sSelect && ed) sSelect.addEventListener('change', (e) => { ed.className = ed.className.replace(/spacing-\w+/, '') + ' ' + e.target.value; });
+}
+
+function setupAuthHandlers() {
+    // Initialize Firebase auth
+    if (typeof AuthUtils !== 'undefined') {
+        AuthUtils.init();
+    }
+
+    // Login button
+    const btnLogin = document.getElementById('btn-login');
+    if (btnLogin) {
+        btnLogin.addEventListener('click', () => {
+            if (typeof AuthUtils !== 'undefined') {
+                AuthUtils.showLoginModal();
+            }
+        });
+    }
+
+    // Logout button
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', () => {
+            if (typeof AuthUtils !== 'undefined') {
+                AuthUtils.handleLogout();
+            }
+        });
+    }
+
+    // Manual sync button
+    const btnSync = document.getElementById('btn-sync');
+    if (btnSync) {
+        btnSync.addEventListener('click', () => {
+            if (typeof AuthUtils !== 'undefined') {
+                AuthUtils.handleManualSync();
+            }
+        });
+    }
+
+    // Handle Enter key in password field
+    const passwordInput = document.getElementById('auth-password-input');
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && typeof AuthUtils !== 'undefined') {
+                AuthUtils.handleLoginSubmit();
+            }
+        });
+    }
 }
