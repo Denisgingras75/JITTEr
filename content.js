@@ -4,7 +4,13 @@ const ANCHOR_PREFIX = "#jitter:";
 const currentURL = window.location.href.split('?')[0];
 const isIframe = (window !== window.top);
 
-let passport = { totalKeystrokes: 0, level: "Novice" };
+let passport = {
+    totalKeystrokes: 0,
+    level: "Novice",
+    firstUsed: null,
+    lastUsed: null,
+    sessionsCompleted: 0
+};
 let project = { isActive: false, humanKeystrokes: 0, pasteCount: 0, startTime: null };
 
 // --- LOKI BIOMETRICS ---
@@ -24,7 +30,16 @@ function loadData() {
     try {
         if (!chrome.runtime?.id) return;
         chrome.storage.local.get(['passport', currentURL], (result) => {
-            if (result.passport) passport = result.passport;
+            if (result.passport) {
+                passport = result.passport;
+            }
+            // Initialize timestamps if first time
+            if (!passport.firstUsed) {
+                passport.firstUsed = Date.now();
+            }
+            passport.lastUsed = Date.now();
+            updatePassportLevel();
+            saveData();
             if (result[currentURL]) project = result[currentURL];
             if (!isIframe) { updateUI(); runScanner(); }
         });
@@ -79,14 +94,26 @@ window.addEventListener('keydown', (e) => {
         bio.lastChar = e.key;
 
         passport.totalKeystrokes++;
+        passport.lastUsed = Date.now();
+        updatePassportLevel();
         if (project.isActive) {
             project.humanKeystrokes++;
-            if(!isIframe) updateUI(); 
+            if(!isIframe) updateUI();
         }
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(saveData, 500);
     }
 }, true);
+
+function updatePassportLevel() {
+    const k = passport.totalKeystrokes;
+    if (k < 1000) passport.level = "Novice";
+    else if (k < 5000) passport.level = "Beginner";
+    else if (k < 15000) passport.level = "Intermediate";
+    else if (k < 50000) passport.level = "Advanced";
+    else if (k < 150000) passport.level = "Expert";
+    else passport.level = "Master";
+}
 
 function analyzeRhythm() {
     if (bio.flowIntervals.length < 10) return;
@@ -218,5 +245,94 @@ function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clea
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
 function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div><div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;document.body.appendChild(h)}catch(e){}}
 function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
-function showCertificate(b){try{const d=JSON.parse(atob(b));const m=document.getElementById('jitter-menu');m.style.display='block';m.innerHTML=`<div class="jitter-header" style="background:#00F0FF11;border-color:#00F0FF"><span class="jitter-title" style="color:#00F0FF">CERTIFICATE</span><span class="jitter-close" onclick="document.getElementById('jitter-menu').style.display='none'">×</span></div><div class="jitter-body" style="text-align:center"><div style="font-size:40px;margin-bottom:10px">⚡</div><div style="font-weight:bold;color:#fff">${d.title||'Verified'}</div><div style="font-size:12px;color:#888;margin-bottom:15px">${d.date}</div><div class="jitter-row"><span>Integrity</span><span class="jitter-val" style="color:#00F0FF">${d.integrity}%</span></div><div class="jitter-row"><span>Cog. Ratio</span><span class="jitter-val">${d.cr||'1.0'}</span></div><div class="jitter-row"><span>Edits</span><span class="jitter-val">${d.edits||'0'}</span></div></div>`}catch(e){}}
-function copyBadge(s,a){if(bio.isBot){alert("Verification Denied: Synthetic Behavior");return}const p={type:'project',title:'Verified',integrity:s.integrity,keys:s.typed,pastes:s.pastes,date:new Date().toLocaleDateString(),edits:bio.backspaces,cr:bio.cognitiveRatio.toFixed(2)};const b=btoa(JSON.stringify(p));const id=b.slice(-6).toUpperCase();const u=`${ANCHOR_PREFIX}${b}`;const h=`<a href="${u}" style="text-decoration:none;" data-jitter-payload="${b}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${id}</span></a>`;const t=`[JITTER: 0x${id} | INT:${s.integrity}%]`;navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([h],{type:'text/html'}),'text/plain':new Blob([t],{type:'text/plain'})})]);const btn=document.getElementById('btn-stop');if(btn)btn.innerText="COPIED!"}
+function showCertificate(b) {
+    try {
+        const d = JSON.parse(atob(b));
+        const m = document.getElementById('jitter-menu');
+        m.style.display = 'block';
+
+        // Format passport display
+        let passportDisplay = '—';
+        if (d.passport) {
+            const k = d.passport;
+            if (k >= 1000000) {
+                passportDisplay = (k / 1000000).toFixed(1) + 'M';
+            } else if (k >= 1000) {
+                passportDisplay = (k / 1000).toFixed(1) + 'K';
+            } else {
+                passportDisplay = k.toString();
+            }
+        }
+
+        // Build certificate with passport info
+        m.innerHTML = `
+            <div class="jitter-header" style="background:#00F0FF11;border-color:#00F0FF">
+                <span class="jitter-title" style="color:#00F0FF">CERTIFICATE</span>
+                <span class="jitter-close" onclick="document.getElementById('jitter-menu').style.display='none'">×</span>
+            </div>
+            <div class="jitter-body" style="text-align:center">
+                <div style="font-size:40px;margin-bottom:10px">⚡</div>
+                <div style="font-weight:bold;color:#fff">${d.title || 'Verified'}</div>
+                <div style="font-size:12px;color:#888;margin-bottom:15px">${d.date}</div>
+
+                <div style="font-size:11px;color:#666;text-transform:uppercase;margin-bottom:8px;letter-spacing:1px;">Session Metrics</div>
+                <div class="jitter-row"><span>Integrity</span><span class="jitter-val" style="color:#00F0FF">${d.integrity}%</span></div>
+                <div class="jitter-row"><span>Cog. Ratio</span><span class="jitter-val">${d.cr || '1.0'}</span></div>
+                <div class="jitter-row"><span>Edits</span><span class="jitter-val">${d.edits || '0'}</span></div>
+
+                ${d.passport ? `
+                    <div style="border-top:1px solid #333;margin:15px 0;"></div>
+                    <div style="font-size:11px;color:#666;text-transform:uppercase;margin-bottom:8px;letter-spacing:1px;">Passport Profile</div>
+                    <div class="jitter-row"><span>Total Keys</span><span class="jitter-val" style="color:#FFD700">${passportDisplay}</span></div>
+                    <div class="jitter-row"><span>Level</span><span class="jitter-val">${d.passportLevel || '—'}</span></div>
+                    <div class="jitter-row"><span>Account Age</span><span class="jitter-val">${d.accountAge || '0'} days</span></div>
+                    <div class="jitter-row"><span>Sessions</span><span class="jitter-val">${d.sessions || '1'}</span></div>
+                ` : ''}
+            </div>
+        `;
+    } catch (e) {}
+}
+function copyBadge(s, a) {
+    if (bio.isBot) {
+        alert("Verification Denied: Synthetic Behavior");
+        return;
+    }
+
+    // Increment sessions and update passport
+    passport.sessionsCompleted++;
+    passport.lastUsed = Date.now();
+    saveData();
+
+    // Calculate account age
+    const accountAgeDays = passport.firstUsed ?
+        Math.floor((Date.now() - passport.firstUsed) / (1000 * 60 * 60 * 24)) : 0;
+
+    // Create payload with passport data
+    const p = {
+        type: 'project',
+        title: 'Verified',
+        integrity: s.integrity,
+        keys: s.typed,
+        pastes: s.pastes,
+        date: new Date().toLocaleDateString(),
+        edits: bio.backspaces,
+        cr: bio.cognitiveRatio.toFixed(2),
+        // Passport data
+        passport: passport.totalKeystrokes,
+        passportLevel: passport.level,
+        accountAge: accountAgeDays,
+        sessions: passport.sessionsCompleted
+    };
+
+    const b = btoa(JSON.stringify(p));
+    const id = b.slice(-6).toUpperCase();
+    const u = `${ANCHOR_PREFIX}${b}`;
+    const h = `<a href="${u}" style="text-decoration:none;" data-jitter-payload="${b}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${id}</span></a>`;
+    const t = `[JITTER: 0x${id} | INT:${s.integrity}%]`;
+    navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([h], {type: 'text/html'}),
+        'text/plain': new Blob([t], {type: 'text/plain'})
+    })]);
+    const btn = document.getElementById('btn-stop');
+    if (btn) btn.innerText = "COPIED!";
+}
