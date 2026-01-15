@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jitter Writer | Verified Environment</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background-color: #050505;
+            color: #ddd;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+        #sidebar {
+            width: 260px;
+            background: #0a0a0a;
+            border-right: 1px solid #333;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .stat-box { margin-bottom: 25px; }
+        .label { font-size: 10px; color: #666; letter-spacing: 1px; margin-bottom: 5px; text-transform: uppercase; }
+        .value { font-size: 20px; font-weight: bold; color: #fff; }
+        
+        #editor {
+            flex-grow: 1;
+            padding: 60px 100px;
+            outline: none;
+            overflow-y: auto;
+            font-size: 18px;
+            line-height: 1.6;
+            color: #ccc;
+            font-family: 'Georgia', serif;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid #333;
+            color: #fff;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #222; border-color: #666; }
+        .btn-primary { background: #00F0FF11; border-color: #00F0FF; color: #00F0FF; }
+        .btn-primary:hover { background: #00F0FF22; box-shadow: 0 0 10px #00F0FF44; }
+        
+        .status-badge {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 30px;
+            padding-bottom: 20px; border-bottom: 1px solid #222;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div>
+            <div class="status-badge">
+                <div style="font-size:24px;">⚡</div>
+                <div>
+                    <div style="font-weight:bold; color:#00F0FF; letter-spacing:1px;">JITTER</div>
+                    <div style="font-size:10px; color:#666;">PROTOCOL v1.0</div>
+                </div>
+            </div>
+
+            <div class="stat-box">
+                <div class="label">Total Characters</div>
+                <div class="value" id="total-display">0</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="label">Session Purity</div>
+                <div class="value" id="purity-display" style="color: #00F0FF;">100%</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="label">Keystrokes</div>
+                <div class="value" id="human-count">0</div>
+            </div>
+            
+            <div class="stat-box">
+                <div class="label">Paste Events</div>
+                <div class="value" id="alien-count" style="color:#FF0055;">0</div>
+            </div>
+        </div>
+
+        <div>
+            <button class="btn btn-primary" id="btn-export">MINT BADGE</button>
+            <button class="btn" id="btn-reset">RESET</button>
+        </div>
+    </div>
+
+    <div id="editor" contenteditable="true" placeholder="Start typing..."></div>
+    <script src="writer.js"></script>
+</body>
+</html>
