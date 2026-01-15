@@ -1,4 +1,12 @@
-// background.js - JITTER PROTOCOL (Tab Mode)
+/**
+ * background.js - JITTER PROTOCOL (Tab Mode)
+ *
+ * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+ *
+ * PROPRIETARY AND CONFIDENTIAL
+ * Unauthorized copying, modification, or use is strictly prohibited.
+ * See LICENSE file for full terms.
+ */
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Jitter Protocol Installed");

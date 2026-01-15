@@ -1,4 +1,15 @@
-// content.js - JITTER PROTOCOL v10.0 (Loki Shield)
+/**
+ * content.js - JITTER PROTOCOL v10.0 (Loki Shield)
+ *
+ * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+ *
+ * PROPRIETARY AND CONFIDENTIAL
+ * This file contains proprietary web monitoring and badge verification algorithms.
+ *
+ * Unauthorized copying, modification, distribution, or use of this
+ * software is strictly prohibited without explicit written permission.
+ * See LICENSE file for full terms.
+ */
 
 const ANCHOR_PREFIX = "#jitter:";
 const currentURL = window.location.href.split('?')[0];

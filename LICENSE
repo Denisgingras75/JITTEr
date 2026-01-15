@@ -1,0 +1,71 @@
+JITTEr - Proprietary Software License
+Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+
+JITTER INTEGRITY TRACKING & TYPING ENTROPY RECOGNITION
+
+================================================================================
+PROPRIETARY AND CONFIDENTIAL
+================================================================================
+
+This software and associated documentation files (the "Software") are the
+proprietary and confidential property of Denis Gingras ("Owner").
+
+ALL RIGHTS RESERVED. No part of this Software may be reproduced, distributed,
+or transmitted in any form or by any means, including photocopying, recording,
+or other electronic or mechanical methods, without the prior written permission
+of the Owner, except in the case of brief quotations embodied in critical
+reviews and certain other noncommercial uses permitted by copyright law.
+
+RESTRICTIONS:
+1. The Software may not be copied, modified, merged, published, distributed,
+   sublicensed, and/or sold without explicit written permission from the Owner.
+
+2. Reverse engineering, decompilation, or disassembly of the Software is
+   strictly prohibited except to the extent that such activity is expressly
+   permitted by applicable law.
+
+3. The Software may not be used to create derivative works without explicit
+   written permission from the Owner.
+
+4. Any use of the Software for commercial purposes requires a separate
+   commercial license agreement with the Owner.
+
+5. The Software includes proprietary algorithms and methodologies including
+   but not limited to:
+   - Loki Biometric Analysis System
+   - Keystroke dynamics and cognitive ratio algorithms
+   - Passport accumulation and bot detection systems
+   - Cryptographic chain-of-custody verification
+
+INTELLECTUAL PROPERTY:
+The Software contains trade secrets and proprietary information belonging to
+the Owner. The algorithms, methodologies, and implementation details constitute
+valuable intellectual property protected by copyright, trade secret, and other
+intellectual property laws.
+
+PATENT PENDING:
+Methods and systems for keystroke biometric verification and bot detection
+described in this Software may be subject to pending patent applications.
+
+NO WARRANTY:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+OWNER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+PERMISSION REQUESTS:
+For permissions, licensing inquiries, or commercial use:
+Contact: Denis Gingras
+Repository: https://github.com/Denisgingras75/JITTEr
+
+This license is effective as of January 2025 and shall remain in effect until
+terminated by the Owner.
+
+================================================================================
+NOTICE: This software is protected by copyright law and international treaties.
+Unauthorized reproduction or distribution may result in severe civil and
+criminal penalties, and will be prosecuted to the maximum extent possible
+under the law.
+================================================================================
