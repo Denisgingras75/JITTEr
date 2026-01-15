@@ -1,4 +1,16 @@
-// writer.js - JITTER PROTOCOL v10.0 (Loki Architecture)
+/**
+ * writer.js - JITTER PROTOCOL v10.0 (Loki Architecture)
+ *
+ * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+ *
+ * PROPRIETARY AND CONFIDENTIAL
+ * This file is part of the JITTEr project and contains proprietary
+ * algorithms including the Loki Biometric Analysis System.
+ *
+ * Unauthorized copying, modification, distribution, or use of this
+ * software is strictly prohibited without explicit written permission.
+ * See LICENSE file for full terms.
+ */
 
 let passport = {
     totalKeystrokes: 0,

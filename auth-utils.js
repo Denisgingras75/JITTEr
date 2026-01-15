@@ -1,5 +1,16 @@
-// auth-utils.js - Firebase Authentication & Cloud Sync for JITTEr Passport
-// Privacy-first: Only syncs passport data, NEVER essay content
+/**
+ * auth-utils.js - Firebase Authentication & Cloud Sync for JITTEr Passport
+ *
+ * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+ *
+ * PROPRIETARY AND CONFIDENTIAL
+ * This file contains proprietary cloud synchronization algorithms.
+ * Privacy-first: Only syncs passport data, NEVER essay content
+ *
+ * Unauthorized copying, modification, distribution, or use of this
+ * software is strictly prohibited without explicit written permission.
+ * See LICENSE file for full terms.
+ */
 
 const AuthUtils = (() => {
     // Firebase Configuration
