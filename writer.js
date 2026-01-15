@@ -1,6 +1,12 @@
 // writer.js - JITTER PROTOCOL v10.0 (Loki Architecture)
 
-let passport = { totalKeystrokes: 0, level: "Novice" };
+let passport = {
+    totalKeystrokes: 0,
+    level: "Novice",
+    firstUsed: null,
+    lastUsed: null,
+    sessionsCompleted: 0
+};
 let session = { humanChars: 0, alienChars: 0, startTime: Date.now() };
 
 // --- LOKI BIOMETRICS ---
@@ -18,7 +24,16 @@ const bio = {
 
 document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.get(['passport'], (result) => {
-        if (result.passport) passport = result.passport;
+        if (result.passport) {
+            passport = result.passport;
+        }
+        // Initialize timestamps if first time
+        if (!passport.firstUsed) {
+            passport.firstUsed = Date.now();
+        }
+        passport.lastUsed = Date.now();
+        updatePassportLevel();
+        chrome.storage.local.set({ passport: passport });
         updateDashboard();
     });
 
@@ -74,6 +89,8 @@ function handleKey(e) {
 
         session.humanChars++;
         passport.totalKeystrokes++;
+        passport.lastUsed = Date.now();
+        updatePassportLevel();
         chrome.storage.local.set({ passport: passport });
         updateDashboard();
     }
@@ -118,10 +135,20 @@ function handlePaste(e) {
     updateDashboard();
 }
 
+function updatePassportLevel() {
+    const k = passport.totalKeystrokes;
+    if (k < 1000) passport.level = "Novice";
+    else if (k < 5000) passport.level = "Beginner";
+    else if (k < 15000) passport.level = "Intermediate";
+    else if (k < 50000) passport.level = "Advanced";
+    else if (k < 150000) passport.level = "Expert";
+    else passport.level = "Master";
+}
+
 function updateDashboard() {
     const editor = document.getElementById('editor');
     if(!editor) return;
-    
+
     const text = editor.innerText;
     const sessionTotal = session.humanChars + session.alienChars;
     let purity = 100;
@@ -157,6 +184,23 @@ function updateDashboard() {
             elPurity.style.fontSize = '24px';
         }
     }
+
+    // Update passport display
+    const elPassport = document.getElementById('passport-display');
+    const elPassportLevel = document.getElementById('passport-level');
+    if(elPassport) {
+        const k = passport.totalKeystrokes;
+        if (k >= 1000000) {
+            elPassport.innerText = (k / 1000000).toFixed(1) + 'M';
+        } else if (k >= 1000) {
+            elPassport.innerText = (k / 1000).toFixed(1) + 'K';
+        } else {
+            elPassport.innerText = k.toString();
+        }
+    }
+    if(elPassportLevel) {
+        elPassportLevel.innerText = passport.level;
+    }
 }
 
 function resetSession() {
@@ -183,17 +227,31 @@ function exportBadge() {
     if (textLength > 0) integrity = Math.round((session.humanChars / textLength) * 100);
     if (integrity > 100) integrity = 100;
 
-    // Payload includes Cognitive Ratio (CR)
-    const payload = { 
-        type: 'project', 
-        title: 'Jitter Doc', 
-        purity: purity, 
-        integrity: integrity, 
-        keys: session.humanChars, 
-        edits: bio.backspaces, 
+    // Increment sessions completed
+    passport.sessionsCompleted++;
+    passport.lastUsed = Date.now();
+    chrome.storage.local.set({ passport: passport });
+
+    // Calculate account age in days
+    const accountAgeDays = passport.firstUsed ?
+        Math.floor((Date.now() - passport.firstUsed) / (1000 * 60 * 60 * 24)) : 0;
+
+    // Payload includes Cognitive Ratio (CR) + Passport Data
+    const payload = {
+        type: 'project',
+        title: 'Jitter Doc',
+        purity: purity,
+        integrity: integrity,
+        keys: session.humanChars,
+        edits: bio.backspaces,
         cr: bio.cognitiveRatio.toFixed(2), // The Loki Metric
-        entropy: bio.entropy, 
-        date: date 
+        entropy: bio.entropy,
+        date: date,
+        // Passport data
+        passport: passport.totalKeystrokes,
+        passportLevel: passport.level,
+        accountAge: accountAgeDays,
+        sessions: passport.sessionsCompleted
     };
     
     const base64 = btoa(JSON.stringify(payload));
