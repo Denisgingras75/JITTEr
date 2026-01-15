@@ -1,5 +1,4 @@
-// background.js - JITTER PROTOCOL
-// NUCLEAR PATH FINDING
+// background.js - JITTER PROTOCOL (Tab Mode)
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Jitter Protocol Installed");
@@ -16,14 +15,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function openWriter() {
-  // THE FIX: Force Absolute Path Resolution
+  // FALLBACK: Open as a TAB instead of a Window (Harder to block)
   const writerUrl = chrome.runtime.getURL('writer.html');
+  console.log("Opening tab:", writerUrl);
   
-  console.log("Attempting to launch:", writerUrl);
-
-  chrome.windows.create({
-    url: writerUrl, 
-    type: 'popup',
-    state: 'maximized'
+  chrome.tabs.create({
+    url: writerUrl
   });
 }
