@@ -56,7 +56,6 @@
         }
         .tool-btn:hover { background: #222; color: #fff; }
         
-        /* DROPDOWN STYLE */
         .tool-select {
             background: #111; color: #ddd; border: 1px solid #333;
             padding: 5px; border-radius: 4px; font-size: 12px; cursor: pointer;
@@ -103,14 +102,27 @@
                 <div style="font-size:10px; color:#666;">WRITER PRO</div>
             </div>
         </div>
+
         <div class="stat-box">
             <div class="label">Session Purity</div>
             <div class="value" id="purity-display" style="color: #00F0FF;">100%</div>
         </div>
+
+        <div class="stat-box">
+            <div class="label">Rhythm Entropy</div>
+            <div class="value" id="entropy-display" style="color: #888;">100</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="label">Human Edits</div>
+            <div class="value" id="edits-display" style="color: #FFD700;">0</div>
+        </div>
+
         <div class="stat-box">
             <div class="label">Words</div>
             <div class="value" id="word-count">0</div>
         </div>
+
         <div style="margin-top:auto;">
             <button class="btn btn-primary" id="btn-export">MINT BADGE</button>
             <button class="btn" id="btn-reset">RESET</button>
