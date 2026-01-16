@@ -202,50 +202,46 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script src="stats-utils.js"></script>
 
     <script>
-        let auth = null;
+        let supabase = null;
         let currentUser = null;
 
-        // Firebase config (same as auth-utils.js)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY_HERE",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
+        // Supabase config (same as auth-utils.js)
+        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';
 
-        // Initialize Firebase
+        // Initialize Supabase
         async function init() {
             try {
-                if (!firebase.apps.length) {
-                    firebase.initializeApp(firebaseConfig);
-                }
-
-                auth = firebase.auth();
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
                 // Initialize stats utils
-                await StatsUtils.init();
+                await StatsUtils.init(supabase);
 
                 // Listen for auth state changes
-                auth.onAuthStateChanged((user) => {
-                    currentUser = user;
+                supabase.auth.onAuthStateChange((event, session) => {
+                    currentUser = session?.user || null;
                     updateAuthUI();
 
-                    if (user) {
+                    if (event === 'SIGNED_IN' && currentUser) {
                         // Load stats when logged in
                         loadStats();
                     }
                 });
+
+                // Get current session
+                const { data: { session } } = await supabase.auth.getSession();
+                currentUser = session?.user || null;
+                updateAuthUI();
+
+                if (currentUser) {
+                    loadStats();
+                }
             } catch (error) {
                 console.error('Init error:', error);
                 document.getElementById('auth-message').innerText = 'Error initializing: ' + error.message;
@@ -281,7 +277,12 @@
             if (!email || !password) return;
 
             try {
-                await auth.signInWithEmailAndPassword(email, password);
+                const { error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) throw error;
             } catch (error) {
                 alert('Login failed: ' + error.message);
             }
@@ -289,7 +290,8 @@
 
         async function logout() {
             try {
-                await auth.signOut();
+                const { error } = await supabase.auth.signOut();
+                if (error) throw error;
             } catch (error) {
                 alert('Logout failed: ' + error.message);
             }
@@ -325,21 +327,21 @@
             }
 
             tbody.innerHTML = badges.map(badge => {
-                const time = badge.timestamp ? new Date(badge.timestamp.toDate()).toLocaleString() : 'N/A';
-                const riskClass = badge.riskLevel === 'HIGH' ? 'badge-high' :
-                                 badge.riskLevel === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+                const time = badge.created_at ? new Date(badge.created_at).toLocaleString() : 'N/A';
+                const riskClass = badge.risk_level === 'HIGH' ? 'badge-high' :
+                                 badge.risk_level === 'MEDIUM' ? 'badge-medium' : 'badge-low';
 
                 return `
                     <tr>
                         <td>${time}</td>
                         <td>${badge.integrity || 0}%</td>
-                        <td>${badge.cognitiveRatio || 0}</td>
+                        <td>${badge.cognitive_ratio || 0}</td>
                         <td>${badge.entropy || 0}</td>
                         <td>${(badge.keystrokes || 0).toLocaleString()}</td>
-                        <td>${(badge.wordCount || 0).toLocaleString()}</td>
-                        <td>${badge.passportLevel || 'N/A'}</td>
-                        <td>${badge.suspicionScore || 0}</td>
-                        <td class="${riskClass}">${badge.riskLevel || 'LOW'}</td>
+                        <td>${(badge.word_count || 0).toLocaleString()}</td>
+                        <td>${badge.passport_level || 'N/A'}</td>
+                        <td>${badge.suspicion_score || 0}</td>
+                        <td class="${riskClass}">${badge.risk_level || 'LOW'}</td>
                     </tr>
                 `;
             }).join('');

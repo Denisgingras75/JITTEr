@@ -1,5 +1,5 @@
 /**
- * stats-utils.js - Firebase Analytics & Statistics Tracking for JITTEr
+ * stats-utils.js - Supabase Analytics & Statistics Tracking for JITTEr
  *
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  *
@@ -13,29 +13,13 @@
  */
 
 const StatsUtils = (() => {
-    let analytics = null;
-    let db = null;
+    let supabase = null;
 
-    // Initialize Firebase Analytics
-    async function init() {
+    // Initialize with Supabase client
+    async function init(supabaseClient) {
         try {
-            if (typeof firebase === 'undefined') {
-                console.error('Firebase SDK not loaded');
-                return false;
-            }
-
-            // Get analytics instance
-            if (firebase.analytics) {
-                analytics = firebase.analytics();
-                console.log('Firebase Analytics initialized');
-            }
-
-            // Get Firestore instance
-            if (firebase.firestore) {
-                db = firebase.firestore();
-                console.log('Firestore initialized for stats');
-            }
-
+            supabase = supabaseClient;
+            console.log('Stats tracking initialized with Supabase');
             return true;
         } catch (error) {
             console.error('Stats init error:', error);
@@ -45,25 +29,20 @@ const StatsUtils = (() => {
 
     // Track user signup
     async function trackSignup(userId, method = 'email') {
-        try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('sign_up', {
-                    method: method
-                });
-            }
+        if (!supabase || !userId) return;
 
-            // Store in Firestore
-            if (db && userId) {
-                await db.collection('user_stats').doc(userId).set({
-                    signupDate: firebase.firestore.FieldValue.serverTimestamp(),
-                    signupMethod: method,
-                    totalBadges: 0,
-                    totalKeystrokes: 0,
-                    totalSessions: 0,
-                    lastActive: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
+        try {
+            await supabase
+                .from('user_stats')
+                .insert([{
+                    user_id: userId,
+                    signup_method: method,
+                    total_badges: 0,
+                    total_keystrokes: 0,
+                    total_sessions: 0,
+                    last_active: new Date().toISOString(),
+                    created_at: new Date().toISOString()
+                }]);
 
             console.log('Tracked signup for user:', userId);
         } catch (error) {
@@ -73,21 +52,16 @@ const StatsUtils = (() => {
 
     // Track user login
     async function trackLogin(userId, method = 'email') {
-        try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('login', {
-                    method: method
-                });
-            }
+        if (!supabase || !userId) return;
 
-            // Update last active time
-            if (db && userId) {
-                await db.collection('user_stats').doc(userId).update({
-                    lastActive: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
+        try {
+            await supabase
+                .from('user_stats')
+                .update({
+                    last_active: new Date().toISOString(),
+                    last_login: new Date().toISOString()
+                })
+                .eq('user_id', userId);
 
             console.log('Tracked login for user:', userId);
         } catch (error) {
@@ -97,44 +71,45 @@ const StatsUtils = (() => {
 
     // Track badge mint
     async function trackBadgeMint(userId, badgeData) {
+        if (!supabase || !userId) return;
+
         try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('badge_mint', {
+            // Update user stats
+            const { data: currentStats } = await supabase
+                .from('user_stats')
+                .select('total_badges, total_keystrokes')
+                .eq('user_id', userId)
+                .single();
+
+            if (currentStats) {
+                await supabase
+                    .from('user_stats')
+                    .update({
+                        total_badges: (currentStats.total_badges || 0) + 1,
+                        total_keystrokes: (currentStats.total_keystrokes || 0) + (badgeData.keystrokes || 0),
+                        last_active: new Date().toISOString(),
+                        last_badge_mint: new Date().toISOString()
+                    })
+                    .eq('user_id', userId);
+            }
+
+            // Store individual badge record
+            await supabase
+                .from('badges')
+                .insert([{
+                    user_id: userId,
                     integrity: badgeData.integrity || 0,
                     cognitive_ratio: badgeData.cognitiveRatio || 0,
-                    passport_level: badgeData.passportLevel || 'Novice',
-                    suspicion_score: badgeData.suspicionScore || 0
-                });
-            }
-
-            // Update user stats
-            if (db && userId) {
-                const userStatsRef = db.collection('user_stats').doc(userId);
-
-                await userStatsRef.update({
-                    totalBadges: firebase.firestore.FieldValue.increment(1),
-                    totalKeystrokes: firebase.firestore.FieldValue.increment(badgeData.keystrokes || 0),
-                    lastActive: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastBadgeMint: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                // Store individual badge record
-                await db.collection('badges').add({
-                    userId: userId,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    integrity: badgeData.integrity || 0,
-                    cognitiveRatio: badgeData.cognitiveRatio || 0,
                     entropy: badgeData.entropy || 0,
                     keystrokes: badgeData.keystrokes || 0,
-                    wordCount: badgeData.wordCount || 0,
-                    sessionDuration: badgeData.sessionDuration || 0,
-                    passportLevel: badgeData.passportLevel || 'Novice',
-                    passportTotal: badgeData.passportTotal || 0,
-                    suspicionScore: badgeData.suspicionScore || 0,
-                    riskLevel: badgeData.riskLevel || 'LOW'
-                });
-            }
+                    word_count: badgeData.wordCount || 0,
+                    session_duration: badgeData.sessionDuration || 0,
+                    passport_level: badgeData.passportLevel || 'Novice',
+                    passport_total: badgeData.passportTotal || 0,
+                    suspicion_score: badgeData.suspicionScore || 0,
+                    risk_level: badgeData.riskLevel || 'LOW',
+                    created_at: new Date().toISOString()
+                }]);
 
             console.log('Tracked badge mint');
         } catch (error) {
@@ -144,22 +119,23 @@ const StatsUtils = (() => {
 
     // Track session completion
     async function trackSessionComplete(userId, sessionData) {
-        try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('session_complete', {
-                    duration: sessionData.duration || 0,
-                    keystrokes: sessionData.keystrokes || 0,
-                    words: sessionData.words || 0
-                });
-            }
+        if (!supabase || !userId) return;
 
-            // Update user stats
-            if (db && userId) {
-                await db.collection('user_stats').doc(userId).update({
-                    totalSessions: firebase.firestore.FieldValue.increment(1),
-                    lastActive: firebase.firestore.FieldValue.serverTimestamp()
-                });
+        try {
+            const { data: currentStats } = await supabase
+                .from('user_stats')
+                .select('total_sessions')
+                .eq('user_id', userId)
+                .single();
+
+            if (currentStats) {
+                await supabase
+                    .from('user_stats')
+                    .update({
+                        total_sessions: (currentStats.total_sessions || 0) + 1,
+                        last_active: new Date().toISOString()
+                    })
+                    .eq('user_id', userId);
             }
 
             console.log('Tracked session complete');
@@ -170,25 +146,18 @@ const StatsUtils = (() => {
 
     // Track passport level up
     async function trackLevelUp(userId, newLevel, totalKeystrokes) {
-        try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('level_up', {
-                    level: newLevel,
-                    total_keystrokes: totalKeystrokes
-                });
-            }
+        if (!supabase || !userId) return;
 
-            // Store milestone
-            if (db && userId) {
-                await db.collection('milestones').add({
-                    userId: userId,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    type: 'level_up',
+        try {
+            await supabase
+                .from('milestones')
+                .insert([{
+                    user_id: userId,
+                    milestone_type: 'level_up',
                     level: newLevel,
-                    totalKeystrokes: totalKeystrokes
-                });
-            }
+                    total_keystrokes: totalKeystrokes,
+                    created_at: new Date().toISOString()
+                }]);
 
             console.log('Tracked level up to:', newLevel);
         } catch (error) {
@@ -198,27 +167,17 @@ const StatsUtils = (() => {
 
     // Track bot detection trigger
     async function trackBotDetection(userId, suspicionScore, signals) {
-        try {
-            // Firebase Analytics event
-            if (analytics) {
-                analytics.logEvent('bot_detection', {
-                    suspicion_score: suspicionScore,
-                    signal_count: signals?.length || 0
-                });
-            }
+        if (!supabase || !userId) return;
 
-            // Store bot detection event
-            if (db && userId) {
-                await db.collection('bot_detections').add({
-                    userId: userId,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    suspicionScore: suspicionScore,
+        try {
+            await supabase
+                .from('bot_detections')
+                .insert([{
+                    user_id: userId,
+                    suspicion_score: suspicionScore,
                     signals: signals || [],
-                    passportData: {
-                        // Store relevant passport data for analysis
-                    }
-                });
-            }
+                    created_at: new Date().toISOString()
+                }]);
 
             console.log('Tracked bot detection:', suspicionScore);
         } catch (error) {
@@ -228,16 +187,17 @@ const StatsUtils = (() => {
 
     // Get user stats
     async function getUserStats(userId) {
-        if (!db || !userId) {
-            return null;
-        }
+        if (!supabase || !userId) return null;
 
         try {
-            const doc = await db.collection('user_stats').doc(userId).get();
-            if (doc.exists) {
-                return doc.data();
-            }
-            return null;
+            const { data, error } = await supabase
+                .from('user_stats')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+
+            if (error) throw error;
+            return data;
         } catch (error) {
             console.error('Get user stats error:', error);
             return null;
@@ -246,43 +206,46 @@ const StatsUtils = (() => {
 
     // Get global aggregate stats (for admin dashboard)
     async function getGlobalStats() {
-        if (!db) {
-            return null;
-        }
+        if (!supabase) return null;
 
         try {
             // Get total users
-            const usersSnapshot = await db.collection('user_stats').get();
-            const totalUsers = usersSnapshot.size;
+            const { count: totalUsers } = await supabase
+                .from('user_stats')
+                .select('*', { count: 'exact', head: true });
 
-            // Get total badges
-            const badgesSnapshot = await db.collection('badges').get();
-            const totalBadges = badgesSnapshot.size;
+            // Get total badges and calculate averages
+            const { data: badges, count: totalBadges } = await supabase
+                .from('badges')
+                .select('integrity, suspicion_score, risk_level', { count: 'exact' });
+
+            if (!badges || badges.length === 0) {
+                return {
+                    totalUsers: totalUsers || 0,
+                    totalBadges: 0,
+                    avgIntegrity: 0,
+                    avgSuspicion: 0,
+                    botDetectionRate: 0,
+                    botCount: 0,
+                    timestamp: Date.now()
+                };
+            }
 
             // Calculate averages
-            let totalIntegrity = 0;
-            let totalSuspicion = 0;
-            let botCount = 0;
+            const totalIntegrity = badges.reduce((sum, b) => sum + (b.integrity || 0), 0);
+            const totalSuspicion = badges.reduce((sum, b) => sum + (b.suspicion_score || 0), 0);
+            const botCount = badges.filter(b => (b.suspicion_score || 0) > 70).length;
 
-            badgesSnapshot.forEach(doc => {
-                const data = doc.data();
-                totalIntegrity += data.integrity || 0;
-                totalSuspicion += data.suspicionScore || 0;
-                if ((data.suspicionScore || 0) > 70) {
-                    botCount++;
-                }
-            });
-
-            const avgIntegrity = totalBadges > 0 ? totalIntegrity / totalBadges : 0;
-            const avgSuspicion = totalBadges > 0 ? totalSuspicion / totalBadges : 0;
-            const botDetectionRate = totalBadges > 0 ? (botCount / totalBadges) * 100 : 0;
+            const avgIntegrity = Math.round(totalIntegrity / badges.length);
+            const avgSuspicion = Math.round(totalSuspicion / badges.length);
+            const botDetectionRate = Math.round((botCount / badges.length) * 1000) / 10;
 
             return {
-                totalUsers: totalUsers,
-                totalBadges: totalBadges,
-                avgIntegrity: Math.round(avgIntegrity),
-                avgSuspicion: Math.round(avgSuspicion),
-                botDetectionRate: Math.round(botDetectionRate * 10) / 10,
+                totalUsers: totalUsers || 0,
+                totalBadges: totalBadges || 0,
+                avgIntegrity: avgIntegrity,
+                avgSuspicion: avgSuspicion,
+                botDetectionRate: botDetectionRate,
                 botCount: botCount,
                 timestamp: Date.now()
             };
@@ -294,56 +257,42 @@ const StatsUtils = (() => {
 
     // Get recent badges (for admin dashboard)
     async function getRecentBadges(limit = 10) {
-        if (!db) {
-            return [];
-        }
+        if (!supabase) return [];
 
         try {
-            const snapshot = await db.collection('badges')
-                .orderBy('timestamp', 'desc')
-                .limit(limit)
-                .get();
+            const { data, error } = await supabase
+                .from('badges')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(limit);
 
-            const badges = [];
-            snapshot.forEach(doc => {
-                badges.push({
-                    id: doc.id,
-                    ...doc.data()
-                });
-            });
+            if (error) throw error;
 
-            return badges;
+            return data || [];
         } catch (error) {
             console.error('Get recent badges error:', error);
             return [];
         }
     }
 
-    // Track custom event
+    // Track custom event (not implemented for Supabase, but kept for API compatibility)
     async function trackEvent(eventName, eventParams = {}) {
-        try {
-            if (analytics) {
-                analytics.logEvent(eventName, eventParams);
-            }
-            console.log('Tracked event:', eventName, eventParams);
-        } catch (error) {
-            console.error('Track event error:', error);
-        }
+        console.log('Custom event:', eventName, eventParams);
+        // Can be implemented with a custom events table if needed
     }
 
-    // Set user properties
+    // Set user properties (not implemented for Supabase, but kept for API compatibility)
     async function setUserProperties(userId, properties) {
-        try {
-            if (analytics) {
-                analytics.setUserProperties(properties);
-            }
+        if (!supabase || !userId) return;
 
-            if (db && userId) {
-                await db.collection('user_stats').doc(userId).update({
+        try {
+            await supabase
+                .from('user_stats')
+                .update({
                     properties: properties,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
+                    updated_at: new Date().toISOString()
+                })
+                .eq('user_id', userId);
 
             console.log('Set user properties');
         } catch (error) {
