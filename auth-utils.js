@@ -47,6 +47,11 @@ const AuthUtils = (() => {
             auth = firebase.auth();
             db = firebase.firestore();
 
+            // Initialize stats tracking
+            if (typeof StatsUtils !== 'undefined') {
+                await StatsUtils.init();
+            }
+
             // Listen for auth state changes
             auth.onAuthStateChanged((user) => {
                 currentUser = user;
@@ -97,6 +102,11 @@ const AuthUtils = (() => {
                 }
             });
 
+            // Track signup event
+            if (typeof StatsUtils !== 'undefined') {
+                await StatsUtils.trackSignup(currentUser.uid, 'email');
+            }
+
             return { success: true, user: currentUser };
         } catch (error) {
             console.error('Signup error:', error);
@@ -112,6 +122,11 @@ const AuthUtils = (() => {
 
             // Sync passport from cloud
             await syncFromCloud();
+
+            // Track login event
+            if (typeof StatsUtils !== 'undefined') {
+                await StatsUtils.trackLogin(currentUser.uid, 'email');
+            }
 
             return { success: true, user: currentUser };
         } catch (error) {

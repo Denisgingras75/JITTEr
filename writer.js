@@ -167,12 +167,23 @@ function handlePaste(e) {
 
 function updatePassportLevel() {
     const k = passport.totalKeystrokes;
+    const oldLevel = passport.level;
+
     if (k < 1000) passport.level = "Novice";
     else if (k < 5000) passport.level = "Beginner";
     else if (k < 15000) passport.level = "Intermediate";
     else if (k < 50000) passport.level = "Advanced";
     else if (k < 150000) passport.level = "Expert";
     else passport.level = "Master";
+
+    // Track level up event
+    if (oldLevel !== passport.level && typeof StatsUtils !== 'undefined' && typeof AuthUtils !== 'undefined') {
+        const status = AuthUtils.getSyncStatus();
+        if (status.isLoggedIn && status.userEmail) {
+            StatsUtils.trackLevelUp(AuthUtils.getCurrentUser()?.uid, passport.level, k)
+                .catch(err => console.error('Level up tracking failed:', err));
+        }
+    }
 }
 
 function updateDashboard() {
@@ -345,6 +356,28 @@ async function exportBadge() {
                     console.log('Auto-synced passport to cloud');
                 }
             }).catch(err => console.error('Auto-sync failed:', err));
+        }
+    }
+
+    // Track badge mint event
+    if (typeof StatsUtils !== 'undefined' && typeof AuthUtils !== 'undefined') {
+        const status = AuthUtils.getSyncStatus();
+        if (status.isLoggedIn && status.userEmail) {
+            const wordCount = document.getElementById('word-count')?.innerText || '0';
+            const sessionDuration = Date.now() - session.startTime;
+
+            StatsUtils.trackBadgeMint(AuthUtils.getCurrentUser()?.uid, {
+                integrity: integrity,
+                cognitiveRatio: bio.cognitiveRatio,
+                entropy: bio.entropy,
+                keystrokes: session.humanChars,
+                wordCount: parseInt(wordCount),
+                sessionDuration: sessionDuration,
+                passportLevel: passport.level,
+                passportTotal: passport.totalKeystrokes,
+                suspicionScore: passport.suspicionScore || 0,
+                riskLevel: passport.suspicionScore > 70 ? 'HIGH' : passport.suspicionScore > 40 ? 'MEDIUM' : 'LOW'
+            }).catch(err => console.error('Stats tracking failed:', err));
         }
     }
 }
