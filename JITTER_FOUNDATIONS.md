@@ -381,7 +381,147 @@ Encoded as Base64, signed with ECDSA P-256. Forgery requires breaking P-256. Cha
 
 ---
 
-## 10. Roadmap
+## 10. The B2B Platform Play — JITTEr as a Protocol
+
+> **This is the real business model.**
+
+JITTEr is not just a Chrome extension. The extension is the seed — it grows the passport network. The business is selling verification to platforms that need to know their users are human.
+
+Think HTTPS. Nobody pays for HTTPS directly. But every website in the world runs it. The infrastructure became the standard. JITTEr's goal is to become the HTTPS of human verification — invisible, universal, trusted.
+
+---
+
+### The Two-Layer Architecture
+
+```
+Layer 1: Extension (Consumer)
+  ├── Free Chrome extension, users install it once
+  ├── Grows the passport network passively
+  ├── Builds lifetime typing history that becomes credentials
+  └── Every user becomes a walking proof of humanness
+
+Layer 2: SDK/API (B2B Revenue)
+  ├── Platforms embed the JITTEr JS widget in their review/comment forms
+  ├── Widget captures session data and mints a badge
+  ├── Platform server calls JITTEr API to verify the badge
+  └── Platform shows "Jitter Verified" on verified content
+```
+
+The extension and the SDK share the same passport. A user who installs the extension for school work is also building credentials that Yelp or Reddit can verify. The network becomes valuable to both sides simultaneously.
+
+---
+
+### Target Platforms
+
+| Platform Type | Example | The Problem They Have | What JITTEr Sells Them |
+|---|---|---|---|
+| Review sites | Yelp, Trustpilot, Google Maps | Fake reviews, paid reviews | Session badge + passport score per review |
+| Social platforms | Reddit, Hacker News | Bot brigading, astroturfing | Human verification on posts/upvotes |
+| Journalism | Substack, local news | Fake comments, harassment bots | "Verified Human Commenter" badge |
+| EdTech | Canvas, Google Classroom | AI-written essays | Writing Ledger integration |
+| Creator platforms | Patreon, Medium | Engagement farming by bots | Verified fan/reader credentials |
+| DAOs / Web3 | Voting systems | Sybil attacks (1 person = 1000 votes) | Passport as proof of unique human |
+
+---
+
+### The SDK (What Platforms Actually Buy)
+
+```html
+<!-- Platform drops this in their review form -->
+<script src="https://cdn.jitter.so/widget.js"></script>
+<jitter-widget
+  api-key="pk_live_xxxx"
+  on-badge="handleBadge"
+  require-passport-days="30"
+/>
+```
+
+```javascript
+// Platform server verifies badge (never trust client)
+const result = await fetch('https://api.jitter.so/v1/verify', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer sk_live_xxxx' },
+  body: JSON.stringify({ badge: badgeFromClient })
+});
+
+const { valid, passportDays, suspicionScore, level } = await result.json();
+// valid: true/false
+// passportDays: 107 (how long this account has existed)
+// suspicionScore: 8 (0-100, lower is better)
+// level: "Advanced"
+```
+
+The platform decides what to do with that data — show a badge, weight the content higher, flag for review. JITTEr just provides the signal.
+
+---
+
+### Pricing Model
+
+| Tier | Who | What | Price |
+|---|---|---|---|
+| Free | Individuals, small sites | 1,000 verifications/month | $0 |
+| Starter | Small platforms | 50K verifications/month | ~$99/mo |
+| Business | Mid-size platforms | 500K verifications/month | ~$499/mo |
+| Enterprise | Yelp, Reddit-scale | Custom, SLA, support | Custom |
+
+School essay mode is a separate SKU:
+- Free for individual teachers (5 students)
+- Per-seat pricing for institutions (~$8/student/year)
+
+---
+
+### Why This Works Without Big Money
+
+The Chrome extension:
+- Costs $5 to publish
+- Self-distributes via word of mouth
+- Each install grows the passport network for free
+
+The API infrastructure:
+- Vercel or Railway for the verification endpoint (~$20/month at early scale)
+- Firebase for passport sync (already in codebase, free tier covers early users)
+- No ML infrastructure needed — it's just math on metadata
+
+First 1,000 users can be acquired through:
+1. Schools and teachers (direct outreach, teachers talk to each other)
+2. WGH integration (every WGH reviewer builds a passport)
+3. ProductHunt / HN launch (the concept is novel enough to earn organic attention)
+
+First paying customer: one school district, one journalism org, or one review site doing a pilot.
+
+---
+
+### The Network Effect
+
+```
+More users install extension
+    → Passport network grows
+    → Passports become more valuable (longer history, more credible)
+    → More platforms want to verify against the network
+    → More platforms embed the SDK
+    → More reasons to install the extension
+    → Loop
+```
+
+This is the same flywheel that made credit scores powerful. One bureau, all lenders check it, all consumers need a score. JITTEr is building the typing credit bureau.
+
+---
+
+### The "Jitter Verified" Trust Mark
+
+Ultimately, the goal is for "Jitter Verified" to mean something. Like:
+
+- ✅ **Verified Human** (passport ≥ 30 days, suspicion < 30)
+- 🔷 **Established Human** (passport ≥ 90 days, suspicion < 20)
+- ⭐ **Trusted Contributor** (passport ≥ 180 days, suspicion < 10, level Advanced+)
+
+Users display this on profiles. Platforms show it on content. The badge becomes a reputation signal that travels across the internet — not tied to one platform, not controlled by any one company except JITTEr.
+
+That's the endgame: a portable human credential that works everywhere.
+
+---
+
+## 11. Roadmap
 
 ### Phase 1 — Jitter Core (Done ✅)
 - Loki biometric analysis (cognitive ratio, rhythm entropy)
@@ -391,29 +531,37 @@ Encoded as Base64, signed with ECDSA P-256. Forgery requires breaking P-256. Cha
 - Teacher verify dashboard
 - Firebase cloud sync (optional)
 
-### Phase 2 — WGH Integration
+### Phase 2 — Writing Ledger (Done ✅)
+- Append-only hash-chained operation timeline
+- Checkpoint snapshots every 10 ops
+- Teacher replay: rewind to any moment, paste events highlighted
+- Ledger hash embedded in badge
+- Export/submit flow
+
+### Phase 3 — B2B SDK (Build Next)
+- [ ] JITTEr verification API endpoint (badge verify, passport score)
+- [ ] JS widget for embedding in third-party forms
+- [ ] Platform dashboard (API key management, usage stats, verified content feed)
+- [ ] Pricing tiers + Stripe integration
+- [ ] School essay mode SKU (teacher dashboard, session review)
+
+### Phase 4 — WGH Integration
 - [ ] NLP translation layer for Google/Yelp reviews → 1-10 scores
 - [ ] Review source tagging system
 - [ ] Weighted rating formula by source trust level
 - [ ] Jitter session badge on WGH review submission
 - [ ] Profile trust score visible on public profiles
 
-### Phase 3 — School Essay Mode
-- [ ] Full-screen enforcement + blur detection
-- [ ] Paste blocking
-- [ ] Assignment mode (word target + timer)
-- [ ] Teacher session dashboard (see all students live)
-- [ ] Export session report (CSV for gradebook)
-
-### Phase 4 — Passport Network
+### Phase 5 — Passport Network
 - [ ] Public profile pages showing passport stats (no content, just numbers)
-- [ ] "Jitter Verified Human" badge for profiles with 90+ day history
+- [ ] "Jitter Verified Human" trust mark tiers
 - [ ] Cross-platform passport (WGH + essay mode share same passport)
 - [ ] Anomaly alerts ("this account submitted 28 reviews today")
+- [ ] DAO/Web3 Sybil resistance (one human = one vote)
 
 ---
 
-## 11. The One-Line Summary
+## 12. The One-Line Summary
 
 > Jitter is sports statistics for human typing —
 > just metadata, just numbers, immutable over time,
