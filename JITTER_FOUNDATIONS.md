@@ -224,36 +224,103 @@ This rewards verified humans without completely discarding real imported reviews
 
 ---
 
-## 7. School Essay Mode — The Locked Room
+## 7. The Writing Ledger — Git for Documents
 
-A separate, full-screen-enforced writer for in-class or timed assignments.
+> **"It's not a lock. It's a camera that records what happened in the box."**
+> — Denis Gingras, February 2026
 
-### Constraints enforced:
-- **Full-screen required** — ESC exits and pauses the session (teacher sees this)
-- **No paste allowed** — clipboard access blocked entirely
-- **No split-screen detectable** — window focus loss logged (blur events)
-- **Timer visible** — elapsed + remaining for timed assignments
-- **Word target visible** — progress bar toward required length
+The Writing Ledger is NOT about blocking anything. It's about recording everything in an append-only, tamper-evident chain. A teacher doesn't get a number — they get a rewind button.
 
-### What this catches:
+### The Core Concept
+
+Every document has a history: a sequence of operations that took it from blank to finished. Normally that history is invisible. The Writing Ledger makes it permanent, portable, and cryptographically sealed.
+
+Every operation is recorded in a timeline:
 ```
-Scenario A: Student opens ChatGPT in other window, copies text
-→ CAUGHT: paste event logged, pasted_chars > 0, purity drops
-
-Scenario B: Student reads from phone and types it
-→ PARTIALLY CAUGHT: typing too fast? Low backspaces?
-  Low cognitive ratio (not pausing to think)?
-  Teacher sees stats, makes judgment call.
-  At minimum: they read it, which is... actually fine?
-
-Scenario C: Student uses a script to type
-→ CAUGHT via rhythm: bot_detected = true
-  OR if undetected in session: passport flags it over time
-  Can't maintain 50+ essays/semester without statistical detection.
+{ t: 0,    op: 'start' }
+{ t: 142,  op: 'key',   char: 'T' }
+{ t: 287,  op: 'key',   char: 'h' }
+{ t: 3847, op: 'paste', text: '800 chars of text', len: 800 }
+{ t: 4102, op: 'delete' }
+{ t: 38000, op: 'blur',  duration: 31000 }   ← left window for 31 seconds
+{ t: 69000, op: 'pause', duration: 4200 }    ← sat and thought
 ```
 
-### The honest position on Scenario B:
-If a student reads AI content from their phone and manually types every word, that's... honestly a lot of work. And they're probably reading and processing the content. Jitter's job isn't to prevent all learning shortcuts — it's to prevent **effortless, zero-engagement cheating**.
+Every 10 operations, a **checkpoint** is taken — a snapshot of the full document content — and hashed against the previous checkpoint. This creates a hash chain:
+
+```
+checkpoint_0: { content: '',         hash: sha256('genesis' + '' + t) }
+checkpoint_1: { content: 'The ...',  hash: sha256(prev_hash + content + t) }
+checkpoint_N: { content: 'full essay', hash: '...' }  ← ledger hash goes in badge
+```
+
+**You cannot remove block 47 (the paste event) without breaking every subsequent hash.** The chain is the proof.
+
+### The Replay
+
+A teacher opens `verify.html`, loads the ledger file, and presses play. They see:
+
+- A document that starts empty
+- Characters appearing at natural typing speed
+- **A flash of highlighted text** when a paste event fires — 800 chars appearing in one frame
+- A greyed-out overlay when the window was unfocused: "⚠️ Window left for 31s"
+- The full scrub bar — drag to any moment in time
+
+This is not an accusation. It's evidence. A student who wrote their own essay has nothing to fear from a rewind. A student who pasted GPT output at second 12 has a very visible problem.
+
+### What This Catches (and Doesn't Try to)
+
+```
+Scenario A: Student pastes GPT text
+→ CAPTURED: paste op recorded, content jumps 800 chars in one frame
+  Teacher rewinds, sees the moment. Conversation happens.
+
+Scenario B: Student reads from phone, types it word by word
+→ PARTIALLY CAPTURED: cognitive ratio low, low backspaces
+  Also: teacher asks "walk me through paragraph 3" — they either can or can't.
+  At minimum: they read it. That's actually engagement.
+
+Scenario C: Student uses a typing script
+→ CAUGHT: rhythm too clean (Loki), OR passport flags over time
+
+Scenario D: Student wrote it themselves
+→ CLEAN: scrub the whole timeline. Writing grew organically from nothing.
+  Natural pauses, edits, false starts, restarts. Human pattern.
+```
+
+### Why Not Block Paste?
+
+Blocking is a war you lose. Students find workarounds. Instead:
+
+**Don't block. Record. The record is indelible.**
+
+A paste you recorded is more damning than a paste you blocked — because the student still submitted the work, and the evidence exists.
+
+### The Privacy Boundary
+
+The Writing Ledger only lives in `writer.html` (the explicit essay writer). The student chose to open it for an assignment. The content IS the submission — storing it for replay is appropriate and expected, same as turning in a paper.
+
+`content.js` (the passive content script on all websites) **never** records content. Ever. That's the locked box. The two modes are distinct by design.
+
+The ledger file is stored locally. It goes nowhere until the student exports and submits it. No server ever sees it unless the student hands it to the teacher.
+
+### The Blockchain Comparison
+
+This is accurate. It's an append-only ledger where each block references the previous one. The ledger hash in the badge is the root of the chain. A teacher with the replay file can verify the chain hash matches the badge — confirming the replay hasn't been edited after export.
+
+You can't retroactively remove a paste event. You can't smooth out the edit history. The ledger is what happened.
+
+### What This Catches in the Broader Picture
+
+For schools: process proof without surveillance. No webcam. No proctoring service. No privacy lawsuits. Just a replayable writing session.
+
+For journalists: "Here is the ledger of how I reported this story." Every draft, every edit, the research-to-writing timeline. Proof of original reporting.
+
+For influencers / creators: "I wrote this review in the writer. Here's the ledger." Authenticity you can show, not just claim.
+
+### Scenarios This Doesn't Try to Stop
+
+If a student reads AI content from their phone and manually types every word — honestly, that's a lot of work. They probably engaged with the content. Jitter's job is not to prevent all learning shortcuts. It's to prevent **effortless, zero-engagement cheating**. The ledger handles the effortless case perfectly.
 
 ---
 

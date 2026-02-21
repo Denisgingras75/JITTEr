@@ -12,6 +12,57 @@
  * See LICENSE file for full terms.
  */
 
+// --- WRITING LEDGER ---
+const ledger = {
+    ops: [],           // append-only operation timeline
+    checkpoints: [],   // content snapshots every 10 ops, hash-chained
+    startTime: null,
+    ledgerHash: null,
+    blurStart: null    // tracks when window was unfocused
+};
+
+async function sha256hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function takeCheckpoint(hasPaste) {
+    const editor = document.getElementById('editor');
+    const content = editor ? editor.innerText : '';
+    const prevHash = ledger.checkpoints.length > 0
+        ? ledger.checkpoints[ledger.checkpoints.length - 1].hash
+        : 'genesis';
+    const hash = await sha256hex(prevHash + '|' + content + '|' + Date.now());
+    ledger.checkpoints.push({
+        t: Date.now(),
+        opIdx: ledger.ops.length,
+        content,
+        hasPaste: hasPaste || false,
+        hash
+    });
+    ledger.ledgerHash = hash;
+    updateLedgerUI();
+}
+
+let pendingPaste = false;
+async function recordOp(op) {
+    ledger.ops.push({ t: Date.now(), ...op });
+    if (op.op === 'paste') pendingPaste = true;
+    if (ledger.ops.length % 10 === 0) {
+        await takeCheckpoint(pendingPaste);
+        pendingPaste = false;
+    }
+}
+
+function updateLedgerUI() {
+    const el = document.getElementById('ledger-count');
+    const hashEl = document.getElementById('ledger-hash');
+    if (el) el.innerText = ledger.checkpoints.length + ' blocks';
+    if (hashEl && ledger.ledgerHash) {
+        hashEl.innerText = ledger.ledgerHash.substring(0, 12).toUpperCase();
+    }
+}
+
 let passport = {
     totalKeystrokes: 0,
     level: "Novice",
@@ -69,6 +120,28 @@ document.addEventListener('DOMContentLoaded', () => {
         editor.addEventListener('click', () => { bio.navigates++; updateDashboard(); });
     }
 
+    // Ledger: track window blur/focus (student leaving the writer)
+    ledger.startTime = Date.now();
+    window.addEventListener('blur', () => {
+        ledger.blurStart = Date.now();
+    });
+    window.addEventListener('focus', () => {
+        if (ledger.blurStart) {
+            const duration = Date.now() - ledger.blurStart;
+            recordOp({ op: 'blur', duration });
+            ledger.blurStart = null;
+        }
+    });
+
+    // Initial checkpoint (empty document)
+    takeCheckpoint(false);
+
+    // Bind ledger buttons
+    const btnReplay = document.getElementById('btn-replay');
+    const btnExportLedger = document.getElementById('btn-export-ledger');
+    if (btnReplay) btnReplay.addEventListener('click', openReplay);
+    if (btnExportLedger) btnExportLedger.addEventListener('click', exportLedger);
+
     // UI Bindings
     const btnExport = document.getElementById('btn-export');
     const btnReset = document.getElementById('btn-reset');
@@ -84,7 +157,7 @@ function handleKey(e) {
     
     // 1. Navigation & Edits
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { bio.navigates++; return; }
-    if (e.key === 'Backspace' || e.key === 'Delete') { bio.backspaces++; updateDashboard(); return; }
+    if (e.key === 'Backspace' || e.key === 'Delete') { bio.backspaces++; recordOp({ op: 'delete' }); updateDashboard(); return; }
     
     // 2. Keystroke Dynamics
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !forbidden.includes(e.key)) {
@@ -108,8 +181,16 @@ function handleKey(e) {
             }
         }
         
+        // Record pause if gap > 2s (a thought break, not just a coffee break)
+        if (bio.lastTime && (now - bio.lastTime) > 2000 && (now - bio.lastTime) < 300000) {
+            recordOp({ op: 'pause', duration: now - bio.lastTime });
+        }
+
         bio.lastTime = now;
         bio.lastChar = e.key;
+
+        // Record to ledger (store char for replay)
+        recordOp({ op: 'key', char: e.key });
 
         session.humanChars++;
         passport.totalKeystrokes++;
@@ -159,9 +240,12 @@ function analyzeRhythm() {
 }
 
 function handlePaste(e) {
-    let len = 0;
-    if (e.clipboardData) { try { len = e.clipboardData.getData('text').length; } catch (err) {} }
-    if (len > 0) session.alienChars += len;
+    let text = '';
+    if (e.clipboardData) { try { text = e.clipboardData.getData('text'); } catch (err) {} }
+    if (text.length > 0) {
+        session.alienChars += text.length;
+        recordOp({ op: 'paste', text, len: text.length });
+    }
     updateDashboard();
 }
 
@@ -303,6 +387,9 @@ async function exportBadge() {
         avgDailyKeys: passport.avgDailyKeys || 0,
         suspicionScore: passport.suspicionScore || 0,
         suspicionSignals: passport.suspicionSignals || [],
+        // Writing Ledger
+        ledgerHash: ledger.ledgerHash || null,
+        ledgerBlocks: ledger.checkpoints.length,
         // Crypto chain
         previousBadge: previousBadgeHash,
         publicKeyId: publicKeyFingerprint,
@@ -347,6 +434,149 @@ async function exportBadge() {
             AuthUtils.syncToCloud(passport).then(result => {
                 }).catch(() => {});
         }
+    }
+}
+
+// --- WRITING LEDGER EXPORT ---
+async function exportLedger() {
+    // Take a final checkpoint to capture current state
+    await takeCheckpoint(false);
+
+    const ledgerFile = {
+        version: '3.0',
+        type: 'jitter-ledger',
+        meta: {
+            created: ledger.startTime,
+            exported: Date.now(),
+            duration: Date.now() - ledger.startTime,
+            ledgerHash: ledger.ledgerHash,
+            totalOps: ledger.ops.length,
+            totalCheckpoints: ledger.checkpoints.length,
+            pasteEvents: ledger.ops.filter(o => o.op === 'paste').length,
+            blurEvents: ledger.ops.filter(o => o.op === 'blur').length,
+            stats: {
+                typedChars: session.humanChars,
+                pastedChars: session.alienChars,
+                backspaces: bio.backspaces,
+                cognitiveRatio: bio.cognitiveRatio,
+                entropy: bio.entropy,
+                isBot: bio.isBot
+            }
+        },
+        // Checkpoints are the backbone of replay — content at every 10 ops
+        checkpoints: ledger.checkpoints,
+        // Full op timeline for granular replay
+        ops: ledger.ops
+    };
+
+    const blob = new Blob([JSON.stringify(ledgerFile, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jitter-ledger-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const btn = document.getElementById('btn-export-ledger');
+    if (btn) {
+        const old = btn.innerText;
+        btn.innerText = 'DOWNLOADED!';
+        setTimeout(() => btn.innerText = old, 2000);
+    }
+}
+
+// --- WRITING LEDGER REPLAY ---
+function openReplay() {
+    const panel = document.getElementById('replay-panel');
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    if (panel.style.display === 'flex') {
+        renderReplay(0);
+        // Update scrubber max
+        const scrubber = document.getElementById('replay-scrubber');
+        if (scrubber) {
+            scrubber.max = Math.max(0, ledger.checkpoints.length - 1);
+            scrubber.value = 0;
+        }
+    }
+}
+
+function renderReplay(checkpointIdx) {
+    if (ledger.checkpoints.length === 0) return;
+    const idx = Math.min(checkpointIdx, ledger.checkpoints.length - 1);
+    const cp = ledger.checkpoints[idx];
+    if (!cp) return;
+
+    const replayEditor = document.getElementById('replay-editor');
+    const replayTime = document.getElementById('replay-time');
+    const replayPaste = document.getElementById('replay-paste-indicator');
+
+    if (replayEditor) {
+        replayEditor.innerText = cp.content;
+        // Flash yellow if this checkpoint contains a paste
+        if (cp.hasPaste) {
+            replayEditor.style.background = '#FFD70022';
+            replayEditor.style.borderColor = '#FFD700';
+            setTimeout(() => {
+                replayEditor.style.background = '#0a0a0a';
+                replayEditor.style.borderColor = '#222';
+            }, 800);
+        } else {
+            replayEditor.style.background = '#0a0a0a';
+            replayEditor.style.borderColor = '#222';
+        }
+    }
+
+    if (replayTime) {
+        const elapsed = Math.round((cp.t - ledger.startTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        replayTime.innerText = `T+${mins}:${String(secs).padStart(2, '0')}`;
+    }
+
+    if (replayPaste) {
+        replayPaste.style.display = cp.hasPaste ? 'block' : 'none';
+    }
+
+    // Check for blur events between this checkpoint and next
+    const blurPanel = document.getElementById('replay-blur-indicator');
+    if (blurPanel) {
+        const startOp = cp.opIdx;
+        const endOp = ledger.checkpoints[idx + 1]?.opIdx || ledger.ops.length;
+        const blurInRange = ledger.ops.slice(startOp, endOp).find(o => o.op === 'blur');
+        if (blurInRange) {
+            const blurSecs = Math.round(blurInRange.duration / 1000);
+            blurPanel.innerText = `⚠️ Window unfocused for ${blurSecs}s`;
+            blurPanel.style.display = 'block';
+        } else {
+            blurPanel.style.display = 'none';
+        }
+    }
+}
+
+let replayInterval = null;
+function toggleReplayPlayback() {
+    const btn = document.getElementById('replay-play-btn');
+    if (replayInterval) {
+        clearInterval(replayInterval);
+        replayInterval = null;
+        if (btn) btn.innerText = '▶ PLAY';
+    } else {
+        const scrubber = document.getElementById('replay-scrubber');
+        let idx = parseInt(scrubber?.value || 0);
+        const max = ledger.checkpoints.length - 1;
+        if (idx >= max) idx = 0;
+        if (btn) btn.innerText = '⏸ PAUSE';
+        replayInterval = setInterval(() => {
+            idx++;
+            if (scrubber) scrubber.value = idx;
+            renderReplay(idx);
+            if (idx >= max) {
+                clearInterval(replayInterval);
+                replayInterval = null;
+                if (btn) btn.innerText = '▶ PLAY';
+            }
+        }, 300); // 300ms per checkpoint ≈ roughly real-time at 10 ops/checkpoint
     }
 }
 
