@@ -1,0 +1,14 @@
+# Build artifacts
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Chrome extension generated files
+*.crx
+*.pem
