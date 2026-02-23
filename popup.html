@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>JITTEr</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">⚡ JITTEr</div>
+            <div class="tagline">Prove Your Writing is Human</div>
+        </div>
+
+        <!-- Current Session -->
+        <div class="section">
+            <div class="section-title">CURRENT SESSION</div>
+
+            <div id="session-active" class="status-active" style="display: none;">
+                <div class="status-indicator">
+                    <span class="dot active"></span>
+                    <span>Tracking</span>
+                </div>
+                <div class="stat-row">
+                    <span>Duration</span>
+                    <span id="session-duration" class="stat-value">0m</span>
+                </div>
+                <div class="stat-row">
+                    <span>Keystrokes</span>
+                    <span id="session-keystrokes" class="stat-value">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Cognitive Ratio</span>
+                    <span id="session-cr" class="stat-value">—</span>
+                </div>
+            </div>
+
+            <div id="session-inactive" class="status-inactive">
+                <div class="status-indicator">
+                    <span class="dot inactive"></span>
+                    <span>Not Tracking</span>
+                </div>
+                <div class="empty-state">
+                    Start typing in any text editor to begin tracking.
+                </div>
+            </div>
+        </div>
+
+        <!-- Passport -->
+        <div class="section">
+            <div class="section-title">YOUR PASSPORT</div>
+            <div class="passport-card">
+                <div class="passport-level">
+                    <div class="level-badge">
+                        <span id="passport-level">Novice</span>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <span>Total Keystrokes</span>
+                    <span id="passport-keystrokes" class="stat-value">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Account Age</span>
+                    <span id="passport-age" class="stat-value">0 days</span>
+                </div>
+                <div class="stat-row">
+                    <span>Sessions</span>
+                    <span id="passport-sessions" class="stat-value">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="section">
+            <button id="btn-sign" class="btn btn-primary" disabled>
+                ✍️ Sign This Article
+            </button>
+            <button id="btn-toggle" class="btn btn-secondary">
+                Toggle Tracking
+            </button>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <a href="#" id="link-portfolio">View Portfolio</a>
+            <a href="#" id="link-help">Help</a>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
