@@ -331,27 +331,8 @@ function init() {
     function createIndicator() {
         const indicator = document.createElement('div');
         indicator.id = 'jitter-indicator';
-        indicator.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #000;
-            color: #666;
-            border: 2px solid #333;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            z-index: 2147483647;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            user-select: none;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        `;
-        indicator.innerHTML = '⚡';
+        indicator.className = 'jitter-inactive'; // Use CSS class instead of inline styles
+        indicator.textContent = '⚡';
         indicator.title = 'JITTEr - Click to open';
 
         // Click to open popup
@@ -367,13 +348,9 @@ function init() {
             if (request.action === 'updateIndicator') {
                 isTracking = request.isTracking;
                 if (isTracking) {
-                    indicator.style.borderColor = '#00F0FF';
-                    indicator.style.color = '#00F0FF';
-                    indicator.style.boxShadow = '0 0 15px rgba(0,240,255,0.4)';
+                    indicator.className = 'jitter-tracking';
                 } else {
-                    indicator.style.borderColor = '#333';
-                    indicator.style.color = '#666';
-                    indicator.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+                    indicator.className = 'jitter-inactive';
                 }
             }
         });

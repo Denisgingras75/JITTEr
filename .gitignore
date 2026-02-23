@@ -12,3 +12,5 @@ Thumbs.db
 # Chrome extension generated files
 *.crx
 *.pem
+node_modules/
+package-lock.json
