@@ -324,7 +324,284 @@ If a student reads AI content from their phone and manually types every word —
 
 ---
 
-## 8. What Makes Jitter Different
+## 8. Who Needs This and Why
+
+> **Jitter isn't just for teachers catching cheaters. It's for anyone who needs to prove they're real.**
+
+The AI content crisis affects everyone who writes for a living or writes to be trusted. Here are the audiences, their specific pain, and exactly how JITTEr solves it.
+
+---
+
+### A. Journalists — "I Wrote This. Here's Proof."
+
+**The problem:** Public trust in journalism is at historic lows. Readers can't tell if a byline is a human reporter or an AI content mill. Newsrooms are already using AI to draft articles and not disclosing it. The journalists who *don't* use AI have no way to prove it.
+
+**How JITTEr helps:**
+- Reporter installs the extension. It runs silently while they write in Google Docs, WordPress, their CMS — any text field
+- Every article gets a session badge: "4,200 words typed over 3 hours, 89 backspaces, cognitive ratio 2.7"
+- The badge links to a verification page anyone can check
+- Over months, the reporter builds a passport: "327 sessions, 14 months active, 890K career keystrokes"
+
+**What the reader sees:**
+```
+Jane Martinez · Staff Reporter
+⚡ JITTEr Verified · 14-month writing history · This article: 100% hand-typed
+```
+
+**Why it works for journalists specifically:**
+- It's opt-in — reporters who care about credibility adopt it voluntarily
+- It's a competitive advantage — "our newsroom is JITTEr-verified" is a trust signal
+- It protects against false accusations — a reporter accused of using AI can show the ledger
+- The writing ledger is their notebook — rewind to any point in the drafting process
+
+**The bigger play:** News organizations can require JITTEr for freelance submissions. "Submit your article with a JITTEr badge or it goes to the bottom of the review queue." This alone could be a B2B vertical.
+
+---
+
+### B. Influencers & Content Creators — "This Review Is Real"
+
+**The problem:** Brands pay influencers $500-$50K per sponsored post. They have no idea if the influencer actually wrote the review or outsourced it to an AI. Meanwhile, audiences are increasingly skeptical of sponsored content. The influencers who genuinely care about their products have no way to stand out from the ones running content through ChatGPT.
+
+**How JITTEr helps:**
+- Creator writes their review/caption/article with JITTEr running
+- Badge shows: "612 words typed in 22 minutes, 34 edits, human rhythm confirmed"
+- Creator shares the badge link alongside their post
+- Their passport shows they've been a real writer for months — not a new account spinning up AI content
+
+**What followers see:**
+```
+🔗 verify.jitter.so/badge/k9x2m1
+⚡ Hand-typed · 22 min session · 3-month writing history
+```
+
+**Why influencers would actually use this:**
+- It's a flex. "I actually wrote this" is the new authenticity signal
+- Brands will prefer verified creators — reduces risk of paying for AI slop
+- It differentiates them from the flood of AI-generated content
+- It builds over time — a 12-month passport is a credibility moat that new AI accounts can't fake
+
+**The brand angle:** Brands can require JITTEr badges for sponsored content campaigns. "Prove you typed the review yourself." This shifts the dynamic — creators who game it get caught, creators who are authentic get rewarded.
+
+---
+
+### C. Product Reviewers — "Verified Human Review"
+
+**The problem:** 40%+ of online reviews are fake. Amazon, Yelp, Google Maps, TripAdvisor — all flooded with bot-generated and paid reviews. Consumers don't trust any of them anymore. The platforms spend millions on detection and still lose.
+
+**How JITTEr helps:**
+- Reviewer types their review on any platform with JITTEr running (extension or embedded widget)
+- Badge proves: session biometrics + passport history
+- Platform tags the review: "⚡ Verified Human Review" or "⚠ Unverified"
+- Verified reviews rank higher, appear more prominently, carry more weight in aggregate scores
+
+**What the consumer sees:**
+```
+★★★★☆  "The lobster roll was incredible — fresh, generous..."
+⚡ Verified Human · 107-day account · Hand-typed review
+```
+vs.
+```
+★★★★★  "Amazing experience! Best food ever! Highly recommend!"
+⚠ Unverified
+```
+
+**Why platforms would integrate this:**
+- The cost of fake reviews is massive — lost consumer trust, regulatory pressure, advertiser complaints
+- JITTEr doesn't require platforms to build their own detection — drop in a widget
+- The trust signal is visible to consumers, which increases platform credibility
+- Verified reviews can be weighted higher in recommendation algorithms
+
+**The economics for review farms:**
+- Without JITTEr: 1,000 fake reviews/day from 1 bot = $15
+- With JITTEr: Need 33-100 aged accounts (90+ days each), limited to 10-30 reviews/day each = $500+ per 1,000 reviews
+- **JITTEr doesn't eliminate fake reviews. It makes them 30x more expensive.**
+
+---
+
+### D. Newsletter & Blog Writers — "The Blue Checkmark for Writers"
+
+**The problem:** Substack, Medium, Ghost, personal blogs — all being flooded with AI-generated content. Readers are unsubscribing because they can't tell who's real. Writers who spend hours crafting original work are competing against people who generate 10 posts/day with AI.
+
+**How JITTEr helps:**
+- Writer installs the extension. It monitors their writing tool (Substack editor, Ghost, Notion, wherever they write)
+- Each published piece gets a verification link
+- The link sits at the bottom of every post — small, unobtrusive, clickable
+
+**What readers see at the bottom of a newsletter:**
+```
+— Denis
+⚡ Verified: hand-typed · 47 min writing session · 8-month passport
+   verify.jitter.so/badge/m4k8p2
+```
+
+**Why writers would adopt this:**
+- It's the "blue checkmark" but for writing authenticity, not identity
+- Readers who care about human writing will preferentially subscribe to verified writers
+- It's free for the writer — the extension is free, the badge is free
+- It compounds over time — a 2-year passport is a credibility signal that AI accounts can never match
+
+---
+
+### E. Academic Researchers — "Process Proof for Peer Review"
+
+**The problem:** Academic fraud is rising. Papers generated by AI, ghost-written by mills, submitted to journals with fabricated data. Peer review can't keep up. Retraction rates are climbing.
+
+**How JITTEr helps:**
+- Researcher writes in their editor with JITTEr running
+- Submission includes a JITTEr badge alongside the manuscript
+- Reviewers see: "This paper was typed over 23 sessions across 4 months, 47K keystrokes, consistent human rhythm"
+- The writing ledger shows the drafting process — not a single paste-dump, but organic construction
+
+**Why journals would care:**
+- Reduces reviewer burden — a verified badge means less suspicion, faster review
+- Creates a paper trail — if fraud is alleged later, the ledger exists
+- Doesn't require changing the submission process — just an additional metadata attachment
+
+---
+
+### The Common Thread
+
+Every use case has the same shape:
+
+```
+1. Someone writes something
+2. Someone else needs to trust it was human-written
+3. JITTEr provides the cryptographic proof
+4. The proof is portable, verifiable, and builds over time
+```
+
+Schools were the first use case because the pain is acute and the buyer is obvious. But the *market* is everyone who writes anything that matters.
+
+---
+
+## 9. The JITTEr Score — One Number That Means Something
+
+Raw metrics are for engineers. Users need one number.
+
+### The Problem with Raw Metrics
+
+A teacher sees "Cognitive Ratio: 2.68" — means nothing. A reader sees "Entropy: 74" — means nothing. The metrics are internally correct but externally useless.
+
+### The Solution: JITTEr Score (0-100)
+
+One composite score that combines all signals into a single human-readable number:
+
+```
+JITTEr Score = weighted combination of:
+  ├── Session Authenticity (40%)
+  │   ├── Entropy score (rhythm variance + cognitive ratio)
+  │   ├── Paste ratio (typed vs pasted characters)
+  │   └── Bot detection (binary flag, hard override to 0 if bot)
+  │
+  ├── Passport Credibility (40%)
+  │   ├── Account age (0-30 days = low, 30-90 = medium, 90+ = high)
+  │   ├── Inverse suspicion score (100 - suspicionScore)
+  │   ├── Session count (more sessions = more trust)
+  │   └── Daily variance (higher variance = more human)
+  │
+  └── History Integrity (20%)
+      ├── Chain hash valid (all previous badges intact)
+      ├── Level progression (natural growth over time)
+      └── Activity pattern consistency (no sudden spikes)
+```
+
+### What the Score Means to People
+
+| Score | Label | Color | What It Tells You |
+|---|---|---|---|
+| 85-100 | **Trusted Human** | Green | Strong passport, natural writing, long history |
+| 65-84 | **Likely Human** | Blue | Good session, moderate history |
+| 40-64 | **Uncertain** | Yellow | New account, limited history, or some flags |
+| 20-39 | **Suspicious** | Orange | Multiple red flags, investigate further |
+| 0-19 | **Bot Pattern** | Red | Failed biometric checks, no credible history |
+
+### How It Appears Everywhere
+
+**On a badge link:**
+```
+⚡ JITTEr Score: 87 · Trusted Human
+```
+
+**On a review:**
+```
+★★★★☆  "The lobster roll was incredible..."
+⚡ 87 · Hand-typed · 3-month writer
+```
+
+**On a newsletter:**
+```
+⚡ Verified 91 · verify.jitter.so/badge/m4k8p2
+```
+
+**On a teacher dashboard:**
+```
+Student: Sarah Chen
+JITTEr Score: 82 · Likely Human
+Session: 891 typed / 0 pasted · 14 min · CR 2.68
+Passport: Advanced · 107 days · 34 sessions
+```
+
+One number. Everyone understands it. Like a credit score for writing authenticity.
+
+---
+
+## 10. The Blue Link — How Badges Travel the Internet
+
+> **The badge has to go where the writing goes.**
+
+### The Problem
+
+A badge that only lives inside the Chrome extension is useless. The proof needs to travel with the content — to tweets, blog posts, review sites, emails, wherever the writing is published.
+
+### The Solution: A Shareable Verification URL
+
+Every minted badge gets a short URL:
+```
+verify.jitter.so/badge/a3f9e2
+```
+
+This link:
+- Works anywhere you can paste text (tweets, bios, blog footers, email signatures)
+- Opens a clean verification page showing the JITTEr Score + session details
+- Is cryptographically tied to the badge — can't be reused for different content
+- Looks like a blue hyperlink in any context (the "blue" you're thinking of)
+
+### Three Levels of Badge Display
+
+**Level 1: The Link (works everywhere, zero integration)**
+```
+Just finished my review of the new MacBook Pro.
+⚡ verify.jitter.so/badge/a3f9e2
+```
+Paste it anywhere. Twitter, Reddit, email, comments. No platform cooperation needed.
+
+**Level 2: The HTML Widget (for websites that embed it)**
+```html
+<jitter-badge hash="a3f9e2" score="87"></jitter-badge>
+```
+Renders as a small, clickable badge inline with the content:
+```
+⚡ 87 · Verified Human · Click to verify
+```
+
+**Level 3: The Platform Integration (for sites with the SDK)**
+The platform reads the badge server-side and renders their own trust UI:
+```
+★★★★☆  Review by @denis  ⚡ JITTEr Verified
+```
+No user action needed — the verification is automatic and built into the platform.
+
+### Why "The Blue Link" Is the V1 Move
+
+- Works TODAY with zero infrastructure beyond a static verification page
+- No platform cooperation required
+- Users self-distribute it (every link is free marketing)
+- Creates demand for Level 2 and 3 integrations
+- The link IS the product for creators — it's their proof
+
+---
+
+## 11. What Makes Jitter Different (Competitive Landscape)
 
 | Tool | Approach | Problem |
 |---|---|---|
@@ -342,7 +619,7 @@ One is a content accusation. The other is a process measurement. The difference 
 
 ---
 
-## 9. Jitter Badge v2.0 Structure
+## 12. Jitter Badge v2.0 Structure
 
 Every minted badge is a compact, portable proof object:
 
@@ -381,7 +658,7 @@ Encoded as Base64, signed with ECDSA P-256. Forgery requires breaking P-256. Cha
 
 ---
 
-## 10. The B2B Platform Play — JITTEr as a Protocol
+## 13. The B2B Platform Play — JITTEr as a Protocol
 
 > **This is the real business model.**
 
@@ -521,7 +798,7 @@ That's the endgame: a portable human credential that works everywhere.
 
 ---
 
-## 11. Roadmap
+## 14. Roadmap
 
 ### Phase 1 — Jitter Core (Done ✅)
 - Loki biometric analysis (cognitive ratio, rhythm entropy)
@@ -561,7 +838,7 @@ That's the endgame: a portable human credential that works everywhere.
 
 ---
 
-## 12. The One-Line Summary
+## 15. The One-Line Summary
 
 > Jitter is sports statistics for human typing —
 > just metadata, just numbers, immutable over time,
