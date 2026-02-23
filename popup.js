@@ -8,40 +8,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadPassport();
 
     // Get current session stats from active tab
-    try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab.id) {
-            chrome.tabs.sendMessage(tab.id, { action: 'getSessionStats' }, (response) => {
-                if (response) {
-                    updateSessionUI(response.session, response.biometrics);
-                }
-            });
-        }
-    } catch (error) {
-        console.log('No active session on current tab');
-    }
+    updateCurrentSession();
+
+    // Poll for updates every second
+    setInterval(updateCurrentSession, 1000);
 
     // Button handlers
     document.getElementById('btn-sign').addEventListener('click', handleSignArticle);
     document.getElementById('btn-toggle').addEventListener('click', handleToggleTracking);
     document.getElementById('link-portfolio').addEventListener('click', (e) => {
         e.preventDefault();
-        // TODO: Open portfolio page
         alert('Portfolio page coming soon!');
     });
     document.getElementById('link-help').addEventListener('click', (e) => {
         e.preventDefault();
-        // TODO: Open help page
         alert('Help: JITTEr tracks your typing to prove your work is human-written.\n\n1. Write anywhere (Medium, Google Docs, etc.)\n2. Click "Sign This Article" when done\n3. Paste badge into your article');
     });
 
-    // Listen for updates from content script
+    // Listen for badge creation results
     chrome.runtime.onMessage.addListener((request) => {
-        if (request.action === 'sessionUpdate') {
+        if (request.action === 'badgeCreated') {
+            showBadge(request.badge);
+        } else if (request.action === 'badgeError') {
+            showError(request.error);
+        } else if (request.action === 'sessionUpdate') {
             updateSessionUI(request.session, request.biometrics);
         }
     });
 });
+
+// Update current session (called on load + every 1s)
+async function updateCurrentSession() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab && tab.id) {
+            chrome.tabs.sendMessage(tab.id, { action: 'getSessionStats' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    // Content script not loaded on this page
+                    return;
+                }
+                if (response) {
+                    updateSessionUI(response.session, response.biometrics);
+                }
+            });
+        }
+    } catch (error) {
+        // Silently fail if can't query tabs
+    }
+}
+
 
 // Load passport data
 async function loadPassport() {
@@ -71,31 +86,55 @@ function updateSessionUI(session, biometrics) {
         document.getElementById('session-keystrokes').textContent = session.keystrokes;
 
         if (biometrics && biometrics.cognitiveRatio) {
-            document.getElementById('session-cr').textContent = biometrics.cognitiveRatio.toFixed(2);
+// Handle sign article
+async function handleSignArticle() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        if (!tab || !tab.id) {
+            showError('No active tab found');
+            return;
         }
 
-        // Enable sign button if enough data
-        const signButton = document.getElementById('btn-sign');
-        if (session.keystrokes > 100) {
-            signButton.disabled = false;
-        }
-    } else {
-        // Show inactive state
-        document.getElementById('session-active').style.display = 'none';
-        document.getElementById('session-inactive').style.display = 'block';
-        document.getElementById('btn-sign').disabled = true;
+        // Show loading state
+        const btn = document.getElementById('btn-sign');
+        btn.textContent = 'Generating...';
+        btn.disabled = true;
+
+        // Request badge creation from content script
+        chrome.tabs.sendMessage(tab.id, { action: 'signArticle' }, (response) => {
+            if (chrome.runtime.lastError) {
+                showError('Please reload the page and try again.');
+                btn.textContent = '✍️ Sign This Article';
+                btn.disabled = false;
+                return;
+            }
+
+            if (!response || !response.success) {
+                showError('Failed to sign article. Make sure you typed at least 100 characters.');
+                btn.textContent = '✍️ Sign This Article';
+                btn.disabled = false;
+                return;
+            }
+
+            // Badge creation initiated, waiting for 'badgeCreated' message
+        });
+    } catch (error) {
+        console.error('Sign article error:', error);
+        showError('An error occurred. Please try again.');
     }
 }
 
-// Handle sign article
-async function handleSignArticle() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+// Show error message
+function showError(message) {
+    alert(`❌ ${message}`);
+    const btn = document.getElementById('btn-sign');
+    if (btn) {
+        btn.textContent = '✍️ Sign This Article';
+        btn.disabled = false;
+    }
+}
 
-    // Request badge creation from content script
-    chrome.tabs.sendMessage(tab.id, { action: 'signArticle' }, async (response) => {
-        if (response && response.success) {
-            // Badge creation initiated
-            // Listen for badge result from background
             chrome.runtime.onMessage.addListener(function badgeListener(request) {
                 if (request.action === 'badgeCreated') {
                     // Show badge to user

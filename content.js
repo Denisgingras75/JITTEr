@@ -263,6 +263,29 @@ function init() {
                 session: sessionData,
                 biometrics: biometricData
             }
+        }, (response) => {
+            // Handle response from background
+            if (chrome.runtime.lastError) {
+                console.error('Badge creation failed:', chrome.runtime.lastError);
+                chrome.runtime.sendMessage({
+                    action: 'badgeError',
+                    error: chrome.runtime.lastError.message
+                });
+                return;
+            }
+
+            if (response && response.badge) {
+                // Forward badge to popup
+                chrome.runtime.sendMessage({
+                    action: 'badgeCreated',
+                    badge: response.badge
+                });
+            } else {
+                chrome.runtime.sendMessage({
+                    action: 'badgeError',
+                    error: 'Failed to create badge'
+                });
+            }
         });
     }
 
