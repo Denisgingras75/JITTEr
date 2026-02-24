@@ -12,3 +12,9 @@ Thumbs.db
 # Chrome extension generated files
 *.crx
 *.pem
+
+# Node.js
+node_modules/
+
+# Test artifacts
+test-results/
