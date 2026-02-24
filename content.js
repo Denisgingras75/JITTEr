@@ -25,15 +25,20 @@ let passport = {
 let project = { isActive: false, humanKeystrokes: 0, pasteCount: 0, startTime: null };
 
 // --- LOKI BIOMETRICS ---
-const bio = { 
-    lastTime: null, 
-    lastChar: '', 
-    flowIntervals: [], 
-    gapIntervals: [], 
-    isBot: false, 
-    entropy: 100, 
+const bio = {
+    lastTime: null,
+    lastChar: '',
+    flowIntervals: [],
+    gapIntervals: [],
+    isBot: false,
+    entropy: 100,
     backspaces: 0,
-    cognitiveRatio: 0
+    cognitiveRatio: 0,
+    // Baseball Card: Dwell Time
+    keydownTimes: {},
+    dwellTimes: [],
+    // Baseball Card: Digraph Timing
+    digraphs: {}
 };
 
 // --- INIT ---
@@ -78,18 +83,23 @@ document.addEventListener('input', (e) => {
 window.addEventListener('keydown', (e) => {
     const forbidden = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Enter', 'Escape'];
 
+    // Dwell time: record keydown timestamp
+    if (e.code) {
+        bio.keydownTimes[e.code] = performance.now();
+    }
+
     if (e.key === 'Backspace' || e.key === 'Delete') {
         bio.backspaces++;
         if (project.isActive) updateUI();
         return;
     }
-    
+
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !forbidden.includes(e.key)) {
         const now = Date.now();
         if (bio.lastTime) {
             const delta = now - bio.lastTime;
             const isGap = /[\s\.\,\;\:\!\?]/.test(bio.lastChar);
-            
+
             if (delta < 2000) {
                 if (isGap) {
                     bio.gapIntervals.push(delta);
@@ -99,6 +109,14 @@ window.addEventListener('keydown', (e) => {
                     if (bio.flowIntervals.length > 50) bio.flowIntervals.shift();
                 }
                 analyzeRhythm();
+            }
+
+            // Digraph tracking
+            if (bio.lastChar && bio.lastChar.length === 1 && delta < 2000) {
+                const pair = (bio.lastChar + e.key).toLowerCase();
+                if (!bio.digraphs[pair]) bio.digraphs[pair] = [];
+                bio.digraphs[pair].push(delta);
+                if (bio.digraphs[pair].length > 20) bio.digraphs[pair].shift();
             }
         }
         bio.lastTime = now;
@@ -113,6 +131,16 @@ window.addEventListener('keydown', (e) => {
         }
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(saveData, 500);
+    }
+}, true);
+
+// Dwell time: keyup handler
+window.addEventListener('keyup', (e) => {
+    if (bio.keydownTimes[e.code]) {
+        const dwellTime = performance.now() - bio.keydownTimes[e.code];
+        bio.dwellTimes.push(dwellTime);
+        if (bio.dwellTimes.length > 200) bio.dwellTimes.shift();
+        delete bio.keydownTimes[e.code];
     }
 }, true);
 
