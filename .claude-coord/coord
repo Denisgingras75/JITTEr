@@ -15,7 +15,7 @@
 #   clean                                Remove stale sessions (no heartbeat in 30 min)
 
 set -euo pipefail
-shopt -s nullglob
+shopt -s nullglob dotglob
 
 COORD_DIR="$(cd "$(dirname "$0")" && pwd)"
 SESSIONS_DIR="$COORD_DIR/sessions"
