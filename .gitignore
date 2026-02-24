@@ -17,3 +17,4 @@ Thumbs.db
 .claude-coord/sessions/
 .claude-coord/claims/
 .claude-coord/messages/
+.claude-coord/.locks/
