@@ -12,3 +12,8 @@ Thumbs.db
 # Chrome extension generated files
 *.crx
 *.pem
+
+# Claude Code coordination channel (local runtime state)
+.claude-coord/sessions/
+.claude-coord/claims/
+.claude-coord/messages/
