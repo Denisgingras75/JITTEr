@@ -180,6 +180,24 @@ const PassportUtils = {
             signals.push('Extremely long session');
         }
 
+        // Signal 7: Analog depth anomalies (if Wooting data available)
+        if (passport.analogStats) {
+            // Unnaturally flat depth — every key pressed to exact same depth
+            if (passport.analogStats.depthStdDev < 0.03 && passport.analogStats.sampleCount >= 20) {
+                score += 25;
+                signals.push('Uniform analog depth (mechanical)');
+            }
+            // No per-finger variation — real humans press harder with index vs pinky
+            if (passport.analogStats.regionVariance < 0.02 && passport.analogStats.sampleCount >= 30) {
+                score += 15;
+                signals.push('No finger-pressure variation');
+            }
+            // Analog depth confidence bonus: natural depth reduces suspicion
+            if (passport.analogStats.depthStdDev >= 0.05 && passport.analogStats.regionVariance >= 0.03) {
+                score = Math.max(0, score - 10);
+            }
+        }
+
         passport.suspicionScore = Math.min(100, score);
         passport.suspicionSignals = signals;
 
@@ -202,6 +220,23 @@ const PassportUtils = {
         return { level: 'LOW', color: '#00F0FF', emoji: '✅' };
     },
 
+    // Update analog depth statistics from Wooting data
+    updateAnalogStats(passport, depthStats) {
+        if (!depthStats) return passport;
+
+        passport.analogStats = {
+            avgDepth: depthStats.avgDepth,
+            depthStdDev: depthStats.depthStdDev,
+            depthRange: depthStats.depthRange,
+            bottomOutRate: depthStats.bottomOutRate,
+            lightTouchRate: depthStats.lightTouchRate,
+            regionVariance: depthStats.regionVariance,
+            sampleCount: depthStats.sampleCount
+        };
+
+        return passport;
+    },
+
     // Full passport update (call this on each keystroke or session end)
     updatePassport(passport, keystrokeCount = 1, isSessionEnd = false) {
         // Update daily stats
@@ -213,6 +248,11 @@ const PassportUtils = {
         // If session ending, record it
         if (isSessionEnd && keystrokeCount > 0) {
             this.recordSession(passport, keystrokeCount);
+        }
+
+        // Update analog depth stats if Wooting is available
+        if (typeof WootingAnalog !== 'undefined' && WootingAnalog.isAvailable()) {
+            this.updateAnalogStats(passport, WootingAnalog.getDepthStats());
         }
 
         // Recalculate statistics

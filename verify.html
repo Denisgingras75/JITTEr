@@ -435,6 +435,47 @@
                             <span class="info-value">${data.entropy || 0}/100</span>
                         </div>
 
+                        ${data.analogProfile ? `
+                        <div class="section-header" style="color:#A855F7;">ANALOG DEPTH BIOMETRICS</div>
+                        <div style="background:#A855F711;border:2px solid #A855F7;border-radius:6px;padding:12px 16px;margin-bottom:15px;display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:20px;">🎹</span>
+                            <div>
+                                <div style="font-weight:bold;color:#A855F7;">Wooting Analog Keyboard Verified</div>
+                                <div style="font-size:12px;color:#888;margin-top:2px;">Per-key depth biometrics captured via Hall Effect sensors</div>
+                            </div>
+                        </div>
+                        <div class="metric-grid">
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Avg Depth</div>
+                                <div class="metric-value" style="color:#A855F7">${Math.round((data.avgDepth || 0) * 100)}%</div>
+                                <div class="metric-status" style="color:#A855F7">
+                                    ${(data.avgDepth || 0) > 0.3 && (data.avgDepth || 0) < 0.9 ? '✅ Natural range' : '⚠️ Review'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Depth Variance</div>
+                                <div class="metric-value" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">${((data.depthStdDev || 0) * 100).toFixed(1)}</div>
+                                <div class="metric-status" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">
+                                    ${(data.depthStdDev || 0) >= 0.03 ? '✅ Human variation' : '⚠️ Flat (bot-like)'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Finger Variation</div>
+                                <div class="metric-value" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">${((data.regionVariance || 0) * 100).toFixed(1)}</div>
+                                <div class="metric-status" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">
+                                    ${(data.regionVariance || 0) >= 0.02 ? '✅ Per-finger patterns' : '⚠️ Uniform pressure'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Bottom-Out Rate</div>
+                                <div class="metric-value" style="color:#A855F7">${Math.round((data.bottomOutRate || 0) * 100)}%</div>
+                                <div class="metric-status" style="color:#888">
+                                    Depth entropy: +${data.depthEntropy || 0}
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+
                         <div class="section-header">PASSPORT PROFILE</div>
                         <div class="info-row">
                             <span class="info-label">Lifetime Keystrokes</span>
@@ -479,15 +520,18 @@
                             ${data.accountAge < 7 && data.passport > 5000 ? '<div class="alert-item">New account with suspiciously high output</div>' : ''}
                             ${data.cr < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
                             ${data.integrity < 80 ? '<div class="alert-item">High paste percentage</div>' : ''}
+                            ${data.analogProfile && data.depthStdDev < 0.03 ? '<div class="alert-item">Uniform analog depth — mechanical input suspected</div>' : ''}
+                            ${data.analogProfile && data.regionVariance < 0.02 ? '<div class="alert-item">No per-finger pressure variation</div>' : ''}
                             <div style="margin-top:10px; font-size:12px; color:#ddd;">
                                 Recommendation: Review this submission manually
                             </div>
                         </div>
                     `;
                 } else if (suspicionScore < 20 && cryptoStatus === 'valid') {
+                    const analogBoost = data.analogProfile ? ' Analog depth biometrics provide additional hardware-verified confidence.' : '';
                     html += `
                         <div class="success-box">
-                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.
+                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.${analogBoost}
                         </div>
                     `;
                 } else if (suspicionScore < 20 && cryptoStatus === 'unsigned') {
