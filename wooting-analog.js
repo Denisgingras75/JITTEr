@@ -16,18 +16,20 @@ const WootingAnalog = {
     device: null,
     analogValues: new Map(),     // HID keyCode -> depth (0.0 - 1.0)
     depthReadings: [],           // Rolling window of per-keystroke depth values
-    depthCurves: [],             // Rolling window of press/release curve shapes
     perFingerDepths: new Map(),  // Track depth patterns per key region
     callbacks: [],               // Listeners for analog events
+    _boundReportHandler: null,
+    _boundDisconnectHandler: null,
 
     // Max rolling window sizes
     MAX_DEPTH_READINGS: 100,
-    MAX_DEPTH_CURVES: 50,
 
     // --- KNOWN WOOTING DEVICES ---
+    // Note: 0x03EB is Atmel/Microchip's VID. Early Wooting keyboards (One, Two)
+    // used Atmel MCUs and thus share this VID. May match non-Wooting Atmel devices.
     WOOTING_FILTERS: [
         { vendorId: 0x31E3 },   // Wooting (current VID: 60HE, Two HE, 80HE)
-        { vendorId: 0x03EB }    // Wooting (legacy VID: One, Two)
+        { vendorId: 0x03EB }    // Wooting (legacy VID: One, Two — shared with Atmel)
     ],
 
     // Wooting analog HID usage page
@@ -91,6 +93,10 @@ const WootingAnalog = {
         if (this.device && this.device.opened) {
             this.device.removeEventListener('inputreport', this._boundReportHandler);
             await this.device.close();
+        }
+        if (this._boundDisconnectHandler) {
+            navigator.hid.removeEventListener('disconnect', this._boundDisconnectHandler);
+            this._boundDisconnectHandler = null;
         }
         this.device = null;
         this.connected = false;
@@ -217,7 +223,6 @@ const WootingAnalog = {
      */
     resetData() {
         this.depthReadings = [];
-        this.depthCurves = [];
         this.perFingerDepths.clear();
     },
 
@@ -239,14 +244,18 @@ const WootingAnalog = {
             this._boundReportHandler = this._handleInputReport.bind(this);
             device.addEventListener('inputreport', this._boundReportHandler);
 
-            // Listen for disconnect
-            navigator.hid.addEventListener('disconnect', (e) => {
+            // Remove any previous disconnect listener to prevent leaks on reconnect
+            if (this._boundDisconnectHandler) {
+                navigator.hid.removeEventListener('disconnect', this._boundDisconnectHandler);
+            }
+            this._boundDisconnectHandler = (e) => {
                 if (e.device === this.device) {
                     this.connected = false;
                     this.device = null;
                     this._notify('disconnect', null);
                 }
-            });
+            };
+            navigator.hid.addEventListener('disconnect', this._boundDisconnectHandler);
 
             this._notify('connect', {
                 name: device.productName,
@@ -361,32 +370,34 @@ const WootingAnalog = {
         return Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / regionAvgs.length);
     },
 
+    // Static map: KeyboardEvent.code -> USB HID Usage ID
+    // Hoisted out of keyEventToHID to avoid re-creating on every keystroke
+    _CODE_TO_HID: {
+        'KeyA': 0x04, 'KeyB': 0x05, 'KeyC': 0x06, 'KeyD': 0x07,
+        'KeyE': 0x08, 'KeyF': 0x09, 'KeyG': 0x0A, 'KeyH': 0x0B,
+        'KeyI': 0x0C, 'KeyJ': 0x0D, 'KeyK': 0x0E, 'KeyL': 0x0F,
+        'KeyM': 0x10, 'KeyN': 0x11, 'KeyO': 0x12, 'KeyP': 0x13,
+        'KeyQ': 0x14, 'KeyR': 0x15, 'KeyS': 0x16, 'KeyT': 0x17,
+        'KeyU': 0x18, 'KeyV': 0x19, 'KeyW': 0x1A, 'KeyX': 0x1B,
+        'KeyY': 0x1C, 'KeyZ': 0x1D,
+        'Digit1': 0x1E, 'Digit2': 0x1F, 'Digit3': 0x20, 'Digit4': 0x21,
+        'Digit5': 0x22, 'Digit6': 0x23, 'Digit7': 0x24, 'Digit8': 0x25,
+        'Digit9': 0x26, 'Digit0': 0x27,
+        'Enter': 0x28, 'Escape': 0x29, 'Backspace': 0x2A,
+        'Tab': 0x2B, 'Space': 0x2C,
+        'Minus': 0x2D, 'Equal': 0x2E,
+        'BracketLeft': 0x2F, 'BracketRight': 0x30,
+        'Backslash': 0x31, 'Semicolon': 0x33,
+        'Quote': 0x34, 'Backquote': 0x35,
+        'Comma': 0x36, 'Period': 0x37, 'Slash': 0x38
+    },
+
     /**
      * Map a keyboard event's key code to approximate HID usage code.
      * This allows correlating DOM keydown events with Wooting analog data.
      */
     keyEventToHID(e) {
-        // Map common KeyboardEvent.code values to HID usage IDs
-        const codeMap = {
-            'KeyA': 0x04, 'KeyB': 0x05, 'KeyC': 0x06, 'KeyD': 0x07,
-            'KeyE': 0x08, 'KeyF': 0x09, 'KeyG': 0x0A, 'KeyH': 0x0B,
-            'KeyI': 0x0C, 'KeyJ': 0x0D, 'KeyK': 0x0E, 'KeyL': 0x0F,
-            'KeyM': 0x10, 'KeyN': 0x11, 'KeyO': 0x12, 'KeyP': 0x13,
-            'KeyQ': 0x14, 'KeyR': 0x15, 'KeyS': 0x16, 'KeyT': 0x17,
-            'KeyU': 0x18, 'KeyV': 0x19, 'KeyW': 0x1A, 'KeyX': 0x1B,
-            'KeyY': 0x1C, 'KeyZ': 0x1D,
-            'Digit1': 0x1E, 'Digit2': 0x1F, 'Digit3': 0x20, 'Digit4': 0x21,
-            'Digit5': 0x22, 'Digit6': 0x23, 'Digit7': 0x24, 'Digit8': 0x25,
-            'Digit9': 0x26, 'Digit0': 0x27,
-            'Enter': 0x28, 'Escape': 0x29, 'Backspace': 0x2A,
-            'Tab': 0x2B, 'Space': 0x2C,
-            'Minus': 0x2D, 'Equal': 0x2E,
-            'BracketLeft': 0x2F, 'BracketRight': 0x30,
-            'Backslash': 0x31, 'Semicolon': 0x33,
-            'Quote': 0x34, 'Backquote': 0x35,
-            'Comma': 0x36, 'Period': 0x37, 'Slash': 0x38
-        };
-        return codeMap[e.code] || null;
+        return this._CODE_TO_HID[e.code] || null;
     },
 
     /**
