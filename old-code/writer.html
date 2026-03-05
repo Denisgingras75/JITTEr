@@ -223,6 +223,19 @@
             <button class="btn btn-small" id="btn-logout" style="display:none; margin-top:10px;">LOGOUT</button>
         </div>
 
+        <!-- Baseball Card: WAR Display -->
+        <div class="stat-box" id="war-card" style="border-color:#FFD700; background: linear-gradient(135deg, #111 0%, #1a1500 100%);">
+            <div class="label" style="color:#FFD700;">Writer Authenticity Rating</div>
+            <div style="display:flex; align-items:baseline; gap:8px;">
+                <div class="value" id="war-display" style="color: #FFD700; font-size:32px;">—</div>
+                <div id="war-tier" style="font-size:11px; color:#888;">Calculating...</div>
+            </div>
+            <div id="war-bar" style="width:100%; background:#222; height:4px; border-radius:2px; margin-top:8px; overflow:hidden;">
+                <div id="war-fill" style="width:0%; background:#FFD700; height:100%; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+
+        <!-- Baseball Card: Session Stats (Box Score) -->
         <div class="stat-box">
             <div class="label">Session Purity</div>
             <div class="value" id="purity-display" style="color: #00F0FF;">100%</div>
@@ -233,20 +246,41 @@
             <div class="value" id="entropy-display" style="color: #888;">100</div>
         </div>
 
-        <div class="stat-box">
-            <div class="label">Human Edits</div>
-            <div class="value" id="edits-display" style="color: #FFD700;">0</div>
+        <div class="stat-box" style="display:flex; gap:10px;">
+            <div style="flex:1;">
+                <div class="label">WPM</div>
+                <div class="value" id="wpm-display" style="font-size:18px;">0</div>
+            </div>
+            <div style="flex:1;">
+                <div class="label">Focus</div>
+                <div class="value" id="focus-display" style="font-size:18px; color:#00F0FF;">—</div>
+            </div>
         </div>
 
-        <div class="stat-box">
-            <div class="label">Words</div>
-            <div class="value" id="word-count">0</div>
+        <div class="stat-box" style="display:flex; gap:10px;">
+            <div style="flex:1;">
+                <div class="label">Edits</div>
+                <div class="value" id="edits-display" style="font-size:18px; color: #FFD700;">0</div>
+            </div>
+            <div style="flex:1;">
+                <div class="label">Words</div>
+                <div class="value" id="word-count" style="font-size:18px;">0</div>
+            </div>
         </div>
 
+        <!-- Baseball Card: Career Stats -->
         <div class="stat-box" style="border-color:#FFD700;">
-            <div class="label">Lifetime Passport</div>
-            <div class="value" id="passport-display" style="color: #FFD700;">0</div>
-            <div style="font-size:10px; color:#666; margin-top:5px;" id="passport-level">Novice</div>
+            <div class="label">Career Passport</div>
+            <div style="display:flex; align-items:baseline; gap:8px;">
+                <div class="value" id="passport-display" style="color: #FFD700;">0</div>
+                <div style="font-size:10px; color:#666;" id="passport-level">Novice</div>
+            </div>
+            <div id="career-details" style="margin-top:8px; font-size:10px; color:#666; font-family:'Courier New', monospace;">
+                <div style="display:flex; justify-content:space-between;"><span>Sessions</span><span id="career-sessions">0</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Career WPM</span><span id="career-wpm">—</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Career Purity</span><span id="career-purity">—</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Streak</span><span id="career-streak">—</span></div>
+            </div>
         </div>
 
         <div style="margin-top:auto;">
