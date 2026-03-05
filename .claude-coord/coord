@@ -1,0 +1,510 @@
+#!/usr/bin/env bash
+# claude-coord — lightweight file-based coordination for parallel Claude Code sessions
+# Usage: .claude-coord/coord <command> [args...]
+#
+# Commands:
+#   register  <id> <description>         Register a session and what it's working on
+#   status                               Show all active sessions, claims, and messages
+#   claim     <id> <file> [file...]      Claim files so other sessions avoid them
+#   unclaim   <id> <file> [file...]      Release file claims
+#   check     <file>                     Check if a file is claimed (and by whom)
+#   send      <from> <to> <message>      Send a message to another session
+#   read      <id>                       Read unread messages for a session
+#   heartbeat <id>                       Update session heartbeat timestamp
+#   deregister <id>                      Remove a session (releases all its claims)
+#   clean                                Remove stale sessions (no heartbeat in 30 min)
+#
+# Correctness guarantees:
+#   - Claims use flock(1) for atomic check-and-set (no TOCTOU races)
+#   - All file writes use tmp+mv for crash safety (no partial JSON on disk)
+#   - Sessions must be registered before claiming files
+#   - Broadcast messages expire after 10 minutes
+
+set -euo pipefail
+shopt -s nullglob dotglob
+
+COORD_DIR="$(cd "$(dirname "$0")" && pwd)"
+SESSIONS_DIR="$COORD_DIR/sessions"
+CLAIMS_DIR="$COORD_DIR/claims"
+MESSAGES_DIR="$COORD_DIR/messages"
+LOCK_DIR="$COORD_DIR/.locks"
+
+mkdir -p "$SESSIONS_DIR" "$CLAIMS_DIR" "$MESSAGES_DIR" "$LOCK_DIR"
+
+now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+now_epoch() { date +%s; }
+
+# Encode a file path to a safe filename for claims
+encode_path() { printf '%s' "$1" | sed 's|/|__|g; s| |_|g'; }
+
+# Atomic write: write to temp file, then mv into place.
+# This prevents any reader from seeing a half-written JSON file.
+atomic_write() {
+    local target="$1"
+    local content="$2"
+    local tmp
+    tmp=$(mktemp "${target}.tmp.XXXXXX")
+    printf '%s\n' "$content" > "$tmp"
+    mv -f "$tmp" "$target"
+}
+
+# Parse a JSON string value from a file (simple, no jq dependency)
+json_str() { grep -o "\"$1\": *\"[^\"]*\"" "$2" | head -1 | sed "s/\"$1\": *\"//;s/\"$//" ; }
+json_num() { grep -o "\"$1\": *[0-9]*" "$2" | head -1 | sed "s/\"$1\": *//" ; }
+
+# Check that a session is registered. Used to gate operations.
+require_session() {
+    local id="$1"
+    if [ ! -f "$SESSIONS_DIR/$id.json" ]; then
+        echo "ERROR: Session '$id' is not registered. Run 'coord register $id <desc>' first."
+        exit 1
+    fi
+}
+
+# ─── REGISTER ────────────────────────────────────────────────────────────────
+cmd_register() {
+    local id="$1" desc="$2"
+    local session_file="$SESSIONS_DIR/$id.json"
+
+    atomic_write "$session_file" "{
+  \"id\": \"$id\",
+  \"description\": \"$desc\",
+  \"registered\": \"$(now_iso)\",
+  \"heartbeat\": \"$(now_iso)\",
+  \"heartbeat_epoch\": $(now_epoch)
+}"
+    echo "Session '$id' registered: $desc"
+}
+
+# ─── STATUS ──────────────────────────────────────────────────────────────────
+cmd_status() {
+    echo "======================================================="
+    echo "  CLAUDE CODE COORDINATION BOARD"
+    echo "======================================================="
+    echo ""
+
+    # Active sessions
+    echo "-- Active Sessions --"
+    local found_sessions=false
+    local session_files=("$SESSIONS_DIR"/*.json)
+    for f in "${session_files[@]}"; do
+        [ -f "$f" ] || continue
+        found_sessions=true
+        local sid desc heartbeat
+        sid=$(json_str "id" "$f")
+        desc=$(json_str "description" "$f")
+        heartbeat=$(json_str "heartbeat" "$f")
+        echo "  [$sid] $desc"
+        echo "         last heartbeat: $heartbeat"
+
+        # Show this session's claims
+        local has_claims=false
+        local claim_files=("$CLAIMS_DIR"/*.json)
+        for cf in "${claim_files[@]}"; do
+            [ -f "$cf" ] || continue
+            local owner
+            owner=$(json_str "owner" "$cf")
+            if [ "$owner" = "$sid" ]; then
+                if ! $has_claims; then
+                    printf "         claims: "
+                    has_claims=true
+                else
+                    printf ", "
+                fi
+                printf "%s" "$(json_str "file" "$cf")"
+            fi
+        done
+        $has_claims && echo ""
+        echo ""
+    done
+    $found_sessions || echo "  (none)"
+    echo ""
+
+    # File claims
+    echo "-- File Claims --"
+    local found_claims=false
+    local all_claims=("$CLAIMS_DIR"/*.json)
+    for cf in "${all_claims[@]}"; do
+        [ -f "$cf" ] || continue
+        found_claims=true
+        local file owner claimed_at
+        file=$(json_str "file" "$cf")
+        owner=$(json_str "owner" "$cf")
+        claimed_at=$(json_str "claimed_at" "$cf")
+        echo "  $file -> $owner (since $claimed_at)"
+    done
+    $found_claims || echo "  (none)"
+    echo ""
+
+    # Pending messages
+    echo "-- Pending Messages --"
+    local found_msgs=false
+    local all_msgs=("$MESSAGES_DIR"/*.json)
+    for mf in "${all_msgs[@]}"; do
+        [ -f "$mf" ] || continue
+        found_msgs=true
+        local from to msg sent
+        from=$(json_str "from" "$mf")
+        to=$(json_str "to" "$mf")
+        msg=$(json_str "message" "$mf")
+        sent=$(json_str "sent" "$mf")
+        echo "  [$from -> $to] ($sent)"
+        echo "    $msg"
+    done
+    $found_msgs || echo "  (none)"
+
+    echo ""
+    echo "======================================================="
+}
+
+# ─── CLAIM (with flock) ─────────────────────────────────────────────────────
+# This is the critical section. Two sessions racing to claim the same file
+# must not both succeed. We use flock on a per-file lock to serialize access.
+cmd_claim() {
+    local owner="$1"; shift
+    require_session "$owner"
+
+    for file in "$@"; do
+        local encoded
+        encoded=$(encode_path "$file")
+        local claim_file="$CLAIMS_DIR/$encoded.json"
+        local lock_file="$LOCK_DIR/$encoded.lock"
+
+        # flock -n = non-blocking (fail immediately if another claim is in progress)
+        # flock -w 5 = wait up to 5 seconds for the lock
+        (
+            flock -w 5 200 || { echo "ERROR: Could not acquire lock for '$file' (timeout)"; exit 1; }
+
+            # Inside the lock: check-then-set is now atomic
+            if [ -f "$claim_file" ]; then
+                local existing_owner
+                existing_owner=$(json_str "owner" "$claim_file")
+                if [ "$existing_owner" != "$owner" ]; then
+                    # Verify the owning session still exists (auto-reclaim stale)
+                    if [ ! -f "$SESSIONS_DIR/$existing_owner.json" ]; then
+                        echo "RECLAIMED: '$file' was held by deregistered session '$existing_owner'"
+                    else
+                        echo "CONFLICT: '$file' is already claimed by '$existing_owner'"
+                        echo "  Use 'coord send $owner $existing_owner \"Need $file\"' to negotiate"
+                        exit 0
+                    fi
+                fi
+            fi
+
+            atomic_write "$claim_file" "{
+  \"file\": \"$file\",
+  \"owner\": \"$owner\",
+  \"claimed_at\": \"$(now_iso)\"
+}"
+            echo "Claimed '$file' for session '$owner'"
+
+        ) 200>"$lock_file"
+    done
+}
+
+# ─── UNCLAIM ─────────────────────────────────────────────────────────────────
+cmd_unclaim() {
+    local owner="$1"; shift
+    for file in "$@"; do
+        local encoded
+        encoded=$(encode_path "$file")
+        local claim_file="$CLAIMS_DIR/$encoded.json"
+        local lock_file="$LOCK_DIR/$encoded.lock"
+
+        (
+            flock -w 5 200 || { echo "ERROR: Could not acquire lock for '$file'"; exit 1; }
+
+            if [ -f "$claim_file" ]; then
+                local existing_owner
+                existing_owner=$(json_str "owner" "$claim_file")
+                if [ "$existing_owner" = "$owner" ]; then
+                    rm "$claim_file"
+                    echo "Released claim on '$file' for session '$owner'"
+                else
+                    echo "Cannot release: '$file' is claimed by '$existing_owner', not '$owner'"
+                fi
+            else
+                echo "No claim exists on '$file'"
+            fi
+
+        ) 200>"$lock_file"
+    done
+}
+
+# ─── CHECK ───────────────────────────────────────────────────────────────────
+cmd_check() {
+    local file="$1"
+    local encoded
+    encoded=$(encode_path "$file")
+    local claim_file="$CLAIMS_DIR/$encoded.json"
+
+    if [ -f "$claim_file" ]; then
+        local owner claimed_at
+        owner=$(json_str "owner" "$claim_file")
+        claimed_at=$(json_str "claimed_at" "$claim_file")
+
+        # Check if owning session is still alive
+        if [ ! -f "$SESSIONS_DIR/$owner.json" ]; then
+            echo "STALE CLAIM by '$owner' (session no longer registered) since $claimed_at"
+            echo "  This claim can be overridden with 'coord claim <your-id> $file'"
+            return 0
+        fi
+
+        echo "CLAIMED by '$owner' since $claimed_at"
+        return 1
+    else
+        echo "AVAILABLE -- no active claim on '$file'"
+        return 0
+    fi
+}
+
+# ─── SEND ────────────────────────────────────────────────────────────────────
+cmd_send() {
+    local from="$1" to="$2" msg="$3"
+    local timestamp
+    timestamp=$(date +%s%N 2>/dev/null || date +%s)
+    local msg_file="$MESSAGES_DIR/${timestamp}-${from}-to-${to}.json"
+
+    atomic_write "$msg_file" "{
+  \"from\": \"$from\",
+  \"to\": \"$to\",
+  \"message\": \"$msg\",
+  \"sent\": \"$(now_iso)\",
+  \"sent_epoch\": $(now_epoch)
+}"
+    echo "Message sent from '$from' to '$to'"
+}
+
+# ─── READ ────────────────────────────────────────────────────────────────────
+cmd_read() {
+    local id="$1"
+    local found=false
+
+    # Direct messages
+    local directed_msgs=("$MESSAGES_DIR"/*-to-"$id".json)
+    for mf in "${directed_msgs[@]}"; do
+        [ -f "$mf" ] || continue
+        found=true
+        local from msg sent
+        from=$(json_str "from" "$mf")
+        msg=$(json_str "message" "$mf")
+        sent=$(json_str "sent" "$mf")
+        echo "[$from @ $sent]: $msg"
+        rm "$mf"
+    done
+
+    # Broadcast messages (to "all") — show but don't delete (others need them)
+    local now
+    now=$(now_epoch)
+    local broadcast_msgs=("$MESSAGES_DIR"/*-to-all.json)
+    for mf in "${broadcast_msgs[@]}"; do
+        [ -f "$mf" ] || continue
+        local from
+        from=$(json_str "from" "$mf")
+        # Don't read your own broadcasts
+        if [ "$from" = "$id" ]; then continue; fi
+
+        # Expire broadcasts older than 10 minutes
+        local sent_epoch
+        sent_epoch=$(json_num "sent_epoch" "$mf")
+        if [ -n "$sent_epoch" ] && [ $(( now - sent_epoch )) -gt 600 ]; then
+            rm "$mf"
+            continue
+        fi
+
+        found=true
+        local msg sent
+        msg=$(json_str "message" "$mf")
+        sent=$(json_str "sent" "$mf")
+        echo "[BROADCAST from $from @ $sent]: $msg"
+    done
+
+    $found || echo "No messages for '$id'"
+}
+
+# ─── HEARTBEAT ───────────────────────────────────────────────────────────────
+cmd_heartbeat() {
+    local id="$1"
+    local session_file="$SESSIONS_DIR/$id.json"
+
+    if [ ! -f "$session_file" ]; then
+        echo "Session '$id' not found. Register first."
+        return 1
+    fi
+
+    local desc registered
+    desc=$(json_str "description" "$session_file")
+    registered=$(json_str "registered" "$session_file")
+
+    atomic_write "$session_file" "{
+  \"id\": \"$id\",
+  \"description\": \"$desc\",
+  \"registered\": \"$registered\",
+  \"heartbeat\": \"$(now_iso)\",
+  \"heartbeat_epoch\": $(now_epoch)
+}"
+    echo "Heartbeat updated for '$id'"
+}
+
+# ─── DEREGISTER ──────────────────────────────────────────────────────────────
+cmd_deregister() {
+    local id="$1"
+
+    rm -f "$SESSIONS_DIR/$id.json"
+
+    # Release all claims owned by this session
+    local claim_files=("$CLAIMS_DIR"/*.json)
+    for cf in "${claim_files[@]}"; do
+        [ -f "$cf" ] || continue
+        local owner
+        owner=$(json_str "owner" "$cf")
+        if [ "$owner" = "$id" ]; then
+            local file
+            file=$(json_str "file" "$cf")
+            rm "$cf"
+            echo "  Released claim on '$file'"
+        fi
+    done
+
+    # Clean up direct messages to this session
+    local to_msgs=("$MESSAGES_DIR"/*-to-"$id".json)
+    for mf in "${to_msgs[@]}"; do
+        [ -f "$mf" ] && rm -f "$mf"
+    done
+
+    echo "Session '$id' deregistered"
+}
+
+# ─── CLEAN ───────────────────────────────────────────────────────────────────
+cmd_clean() {
+    local stale_threshold=1800  # 30 minutes in seconds
+    local broadcast_ttl=600     # 10 minutes for broadcast messages
+    local now
+    now=$(now_epoch)
+    local cleaned=0
+
+    # Clean stale sessions
+    local session_files=("$SESSIONS_DIR"/*.json)
+    for f in "${session_files[@]}"; do
+        [ -f "$f" ] || continue
+        local hb_epoch sid
+        hb_epoch=$(json_num "heartbeat_epoch" "$f")
+        sid=$(json_str "id" "$f")
+
+        if [ -n "$hb_epoch" ]; then
+            local age=$(( now - hb_epoch ))
+            if [ "$age" -gt "$stale_threshold" ]; then
+                echo "Removing stale session '$sid' (last heartbeat ${age}s ago)"
+                cmd_deregister "$sid"
+                cleaned=$((cleaned + 1))
+            fi
+        fi
+    done
+
+    # Clean expired broadcast messages
+    local broadcast_msgs=("$MESSAGES_DIR"/*-to-all.json)
+    for mf in "${broadcast_msgs[@]}"; do
+        [ -f "$mf" ] || continue
+        local sent_epoch
+        sent_epoch=$(json_num "sent_epoch" "$mf")
+        if [ -n "$sent_epoch" ] && [ $(( now - sent_epoch )) -gt "$broadcast_ttl" ]; then
+            rm "$mf"
+            cleaned=$((cleaned + 1))
+        fi
+    done
+
+    # Clean orphaned lock files (locks with no corresponding claim)
+    local lock_files=("$LOCK_DIR"/*.lock)
+    for lf in "${lock_files[@]}"; do
+        [ -f "$lf" ] || continue
+        local base
+        base=$(basename "$lf" .lock)
+        if [ ! -f "$CLAIMS_DIR/$base.json" ]; then
+            rm -f "$lf"
+        fi
+    done
+
+    [ "$cleaned" -eq 0 ] && echo "No stale sessions or expired messages found"
+}
+
+# ─── MAIN ────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<ENDUSAGE
+claude-coord -- coordination channel for parallel Claude Code sessions
+
+Usage: .claude-coord/coord <command> [args...]
+
+Commands:
+  register  <id> <description>       Register a session and what it's working on
+  status                             Show all active sessions, claims, and messages
+  claim     <id> <file> [file...]    Claim files so other sessions avoid them
+  unclaim   <id> <file> [file...]    Release file claims
+  check     <file>                   Check if a file is claimed (and by whom)
+  send      <from> <to> <msg>        Send a message (use 'all' for broadcast)
+  read      <id>                     Read & consume messages for a session
+  heartbeat <id>                     Update session heartbeat timestamp
+  deregister <id>                    Remove a session and release its claims
+  clean                              Remove stale sessions and expired messages
+
+Examples:
+  .claude-coord/coord register session-A "Refactoring crypto-utils.js"
+  .claude-coord/coord claim session-A crypto-utils.js writer.js
+  .claude-coord/coord status
+  .claude-coord/coord send session-A session-B "I'm done with crypto-utils.js"
+  .claude-coord/coord read session-B
+  .claude-coord/coord check writer.js
+  .claude-coord/coord deregister session-A
+ENDUSAGE
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    register)
+        [ $# -ge 2 ] || { echo "Usage: coord register <id> <description>"; exit 1; }
+        cmd_register "$1" "$2"
+        ;;
+    status)
+        cmd_status
+        ;;
+    claim)
+        [ $# -ge 2 ] || { echo "Usage: coord claim <id> <file> [file...]"; exit 1; }
+        cmd_claim "$@"
+        ;;
+    unclaim)
+        [ $# -ge 2 ] || { echo "Usage: coord unclaim <id> <file> [file...]"; exit 1; }
+        cmd_unclaim "$@"
+        ;;
+    check)
+        [ $# -ge 1 ] || { echo "Usage: coord check <file>"; exit 1; }
+        cmd_check "$1"
+        ;;
+    send)
+        [ $# -ge 3 ] || { echo "Usage: coord send <from> <to> <message>"; exit 1; }
+        cmd_send "$1" "$2" "$3"
+        ;;
+    read)
+        [ $# -ge 1 ] || { echo "Usage: coord read <id>"; exit 1; }
+        cmd_read "$1"
+        ;;
+    heartbeat)
+        [ $# -ge 1 ] || { echo "Usage: coord heartbeat <id>"; exit 1; }
+        cmd_heartbeat "$1"
+        ;;
+    deregister)
+        [ $# -ge 1 ] || { echo "Usage: coord deregister <id>"; exit 1; }
+        cmd_deregister "$1"
+        ;;
+    clean)
+        cmd_clean
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $cmd"
+        usage
+        exit 1
+        ;;
+esac

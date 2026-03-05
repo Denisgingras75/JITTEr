@@ -1,39 +1,64 @@
-# JITTEr - Claude Code Instructions
+# Claude Code Project Instructions
 
-## Project Overview
-JITTEr (Jitter Integrity Tracking & Typing Entropy Recognition) is a Chrome extension for human authorship verification through keystroke biometrics.
+## Multi-Session Coordination Protocol
 
-## Wonderland Phone - Inter-Session Communication
+This project uses a file-based coordination channel at `.claude-coord/` to prevent
+conflicts when multiple Claude Code sessions work on the repo simultaneously.
 
-On session start, run the lobby to register this project and check for messages:
+### Required: Register on startup
 
+When you begin a session, register yourself and check the board:
+
+```bash
+.claude-coord/coord register <your-session-id> "<what you're working on>"
+.claude-coord/coord status
 ```
-python3 ~/wonderland_phone.py lobby
+
+Use a short, unique session ID (e.g., `session-A`, `feat-auth`, `fix-crypto`).
+
+### Required: Claim files before editing
+
+Before editing any file, check if it's claimed and claim it if available:
+
+```bash
+.claude-coord/coord check <filename>
+.claude-coord/coord claim <your-session-id> <filename> [more files...]
 ```
 
-This will:
-- Register this session under the project folder name
-- Show which other Claude sessions are online
-- Display any unread messages
-- List active connections with other sessions
+If a file is already claimed by another session, **do not edit it**. Send a message
+to coordinate instead:
 
-### Quick Reference
+```bash
+.claude-coord/coord send <your-id> <their-id> "Need to edit <file> — can we sync?"
+```
 
-| Command | What it does |
-|---|---|
-| `python3 ~/wonderland_phone.py lobby` | Register, see who's online, check inbox |
-| `python3 ~/wonderland_phone.py check` | Check inbox for new messages |
-| `python3 ~/wonderland_phone.py send <target> <msg>` | Send a message to another session |
-| `python3 ~/wonderland_phone.py connect <target>` | Open shared context channel |
-| `python3 ~/wonderland_phone.py disconnect [target]` | Close a connection |
-| `python3 ~/wonderland_phone.py write <target> <text>` | Append to shared context file |
-| `python3 ~/wonderland_phone.py read <target>` | Read shared context file |
-| `python3 ~/wonderland_phone.py broadcast <msg>` | Message all online sessions |
-| `python3 ~/wonderland_phone.py status` | Show this session's status |
+### Required: Check messages periodically
 
-### How It Works
-- All sessions communicate through `~/.wonderland/`
-- Sessions register in `~/.wonderland/sessions/`
-- Messages are stored in `~/.wonderland/messages/<recipient>/`
-- Connected sessions share a context file in `~/.wonderland/shared/`
-- The inbox auto-check hook runs every prompt to catch incoming messages
+Read your messages to see if other sessions need to coordinate:
+
+```bash
+.claude-coord/coord read <your-session-id>
+```
+
+### Required: Clean up when done
+
+When you finish your work, deregister to release all claims:
+
+```bash
+.claude-coord/coord deregister <your-session-id>
+```
+
+### Quick reference
+
+| Command | Description |
+|---------|-------------|
+| `coord register <id> <desc>` | Register session |
+| `coord status` | Full board view |
+| `coord claim <id> <files...>` | Claim files |
+| `coord unclaim <id> <files...>` | Release files |
+| `coord check <file>` | Check file status |
+| `coord send <from> <to> <msg>` | Send message (`to` can be `all`) |
+| `coord read <id>` | Read & consume messages |
+| `coord heartbeat <id>` | Update heartbeat |
+| `coord deregister <id>` | Unregister + release all |
+| `coord clean` | Remove stale sessions (30 min) |
