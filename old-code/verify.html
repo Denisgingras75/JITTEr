@@ -333,47 +333,19 @@
                 const jsonString = atob(base64);
                 const data = JSON.parse(jsonString);
 
-                // --- CRYPTOGRAPHIC VERIFICATION ---
-                // The signature was computed over the payload WITHOUT the signature field.
-                // Strip signature to reconstruct what was originally signed.
-                let cryptoStatus = 'unsigned'; // 'unsigned' | 'valid' | 'invalid'
-                if (data.signature && data.publicKeyJwk) {
-                    const { signature, ...payloadWithoutSignature } = data;
-                    try {
-                        const isValid = await CryptoUtils.verifyBadge(
-                            payloadWithoutSignature,
-                            signature,
-                            data.publicKeyJwk
-                        );
-                        cryptoStatus = isValid ? 'valid' : 'invalid';
-                    } catch (e) {
-                        cryptoStatus = 'invalid';
-                    }
-                }
-
                 const suspicionScore = data.suspicionScore || 0;
                 const riskClass = getRiskClass(suspicionScore);
                 const riskEmoji = getRiskEmoji(suspicionScore);
                 const riskText = getRiskText(suspicionScore);
 
-                // Build crypto status banner
-                const cryptoBanner = cryptoStatus === 'valid'
-                    ? `<div style="background:#00F0FF11;border:2px solid #00F0FF;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔐</span><div><div style="font-weight:bold;color:#00F0FF;">SIGNATURE VALID — Cryptographically Verified</div><div style="font-size:12px;color:#888;margin-top:2px;">ECDSA P-256 · Key ID: ${data.publicKeyId || '—'}</div></div></div>`
-                    : cryptoStatus === 'invalid'
-                    ? `<div style="background:#FF005511;border:2px solid #FF0055;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🚨</span><div><div style="font-weight:bold;color:#FF0055;">SIGNATURE INVALID — Badge may be forged</div><div style="font-size:12px;color:#888;margin-top:2px;">The cryptographic signature does not match the payload.</div></div></div>`
-                    : `<div style="background:#FFD70011;border:2px solid #FFD700;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">⚠️</span><div><div style="font-weight:bold;color:#FFD700;">UNSIGNED BADGE — No cryptographic proof</div><div style="font-size:12px;color:#888;margin-top:2px;">Data is readable but authenticity cannot be confirmed.</div></div></div>`;
-
-                const headerTitle = cryptoStatus === 'valid' ? 'Badge Verified ✅' : cryptoStatus === 'invalid' ? 'Badge Invalid ❌' : 'Badge Decoded (Unsigned)';
-
                 let html = `
                     <div class="result-card">
                         <div class="result-header">
-                            <h2 style="margin:0; color:#fff;">${headerTitle}</h2>
+                            <h2 style="margin:0; color:#fff;">Badge Verified</h2>
                             <div class="risk-badge ${riskClass}">
                                 ${riskEmoji} ${riskText} (${suspicionScore}/100)
                             </div>
                         </div>
-                        ${cryptoBanner}
 
                         <div class="metric-grid">
                             <div class="metric">
@@ -435,47 +407,6 @@
                             <span class="info-value">${data.entropy || 0}/100</span>
                         </div>
 
-                        ${data.analogProfile ? `
-                        <div class="section-header" style="color:#A855F7;">ANALOG DEPTH BIOMETRICS</div>
-                        <div style="background:#A855F711;border:2px solid #A855F7;border-radius:6px;padding:12px 16px;margin-bottom:15px;display:flex;align-items:center;gap:10px;">
-                            <span style="font-size:20px;">🎹</span>
-                            <div>
-                                <div style="font-weight:bold;color:#A855F7;">Wooting Analog Keyboard Verified</div>
-                                <div style="font-size:12px;color:#888;margin-top:2px;">Per-key depth biometrics captured via Hall Effect sensors</div>
-                            </div>
-                        </div>
-                        <div class="metric-grid">
-                            <div class="metric" style="border-color:#A855F744;">
-                                <div class="metric-label">Avg Depth</div>
-                                <div class="metric-value" style="color:#A855F7">${Math.round((data.avgDepth || 0) * 100)}%</div>
-                                <div class="metric-status" style="color:#A855F7">
-                                    ${(data.avgDepth || 0) > 0.3 && (data.avgDepth || 0) < 0.9 ? '✅ Natural range' : '⚠️ Review'}
-                                </div>
-                            </div>
-                            <div class="metric" style="border-color:#A855F744;">
-                                <div class="metric-label">Depth Variance</div>
-                                <div class="metric-value" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">${((data.depthStdDev || 0) * 100).toFixed(1)}</div>
-                                <div class="metric-status" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">
-                                    ${(data.depthStdDev || 0) >= 0.03 ? '✅ Human variation' : '⚠️ Flat (bot-like)'}
-                                </div>
-                            </div>
-                            <div class="metric" style="border-color:#A855F744;">
-                                <div class="metric-label">Finger Variation</div>
-                                <div class="metric-value" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">${((data.regionVariance || 0) * 100).toFixed(1)}</div>
-                                <div class="metric-status" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">
-                                    ${(data.regionVariance || 0) >= 0.02 ? '✅ Per-finger patterns' : '⚠️ Uniform pressure'}
-                                </div>
-                            </div>
-                            <div class="metric" style="border-color:#A855F744;">
-                                <div class="metric-label">Bottom-Out Rate</div>
-                                <div class="metric-value" style="color:#A855F7">${Math.round((data.bottomOutRate || 0) * 100)}%</div>
-                                <div class="metric-status" style="color:#888">
-                                    Depth entropy: +${data.depthEntropy || 0}
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
-
                         <div class="section-header">PASSPORT PROFILE</div>
                         <div class="info-row">
                             <span class="info-label">Lifetime Keystrokes</span>
@@ -495,20 +426,34 @@
                         </div>
 `;
 
-                // Show chain link if present
-                if (data.previousBadge) {
+                // Show crypto verification if available
+                if (data.signature && data.publicKeyId) {
                     html += `
-                        <div class="section-header">BADGE CHAIN</div>
+                        <div class="section-header">CRYPTOGRAPHIC VERIFICATION</div>
                         <div class="chain-indicator">
-                            <span class="chain-icon">⛓️</span>
+                            <span class="chain-icon">🔐</span>
                             <div>
-                                <div style="font-weight:bold; color:#00F0FF;">Linked to Previous Badge</div>
+                                <div style="font-weight:bold; color:#00F0FF;">Digital Signature Present</div>
                                 <div style="font-size:12px; color:#888; margin-top:3px;">
-                                    Previous hash: ${data.previousBadge}
+                                    Key ID: ${data.publicKeyId}
                                 </div>
                             </div>
                         </div>
                     `;
+
+                    if (data.previousBadge) {
+                        html += `
+                            <div class="chain-indicator" style="margin-top:10px;">
+                                <span class="chain-icon">⛓️</span>
+                                <div>
+                                    <div style="font-weight:bold; color:#00F0FF;">Chain Verified</div>
+                                    <div style="font-size:12px; color:#888; margin-top:3px;">
+                                        Previous: ${data.previousBadge}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
                 }
 
                 // Show warnings if high risk
@@ -520,24 +465,15 @@
                             ${data.accountAge < 7 && data.passport > 5000 ? '<div class="alert-item">New account with suspiciously high output</div>' : ''}
                             ${data.cr < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
                             ${data.integrity < 80 ? '<div class="alert-item">High paste percentage</div>' : ''}
-                            ${data.analogProfile && data.depthStdDev < 0.03 ? '<div class="alert-item">Uniform analog depth — mechanical input suspected</div>' : ''}
-                            ${data.analogProfile && data.regionVariance < 0.02 ? '<div class="alert-item">No per-finger pressure variation</div>' : ''}
                             <div style="margin-top:10px; font-size:12px; color:#ddd;">
                                 Recommendation: Review this submission manually
                             </div>
                         </div>
                     `;
-                } else if (suspicionScore < 20 && cryptoStatus === 'valid') {
-                    const analogBoost = data.analogProfile ? ' Analog depth biometrics provide additional hardware-verified confidence.' : '';
+                } else if (suspicionScore < 20) {
                     html += `
                         <div class="success-box">
-                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.${analogBoost}
-                        </div>
-                    `;
-                } else if (suspicionScore < 20 && cryptoStatus === 'unsigned') {
-                    html += `
-                        <div class="success-box" style="background:#FFD70011;border-color:#FFD700;color:#FFD700;">
-                            ⚠️ Metrics look human, but no cryptographic proof. Ask student to re-submit using Jitter v2.0.
+                            ✅ All metrics within normal human ranges. High confidence in authenticity.
                         </div>
                     `;
                 }

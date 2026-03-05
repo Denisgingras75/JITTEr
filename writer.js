@@ -93,7 +93,13 @@ const bio = {
     entropy: 100,
     cognitiveRatio: 0, // The "Human Thought" Metric
     backspaces: 0,
-    navigates: 0
+    navigates: 0,
+    // Wooting Analog depth metrics
+    analogActive: false,
+    lastDepth: 0,
+    avgDepth: 0,
+    depthStdDev: 0,
+    depthEntropy: 0       // Depth-based entropy bonus (0-30)
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -150,6 +156,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupToolbar();
     setupAuthHandlers();
+
+    // Initialize Wooting Analog (auto-reconnect to previously authorized device)
+    if (typeof WootingAnalog !== 'undefined') {
+        WootingAnalog.init().then(connected => {
+            bio.analogActive = connected;
+            if (connected) updateAnalogUI();
+        });
+
+        // Connect button handler
+        const btnWooting = document.getElementById('btn-wooting-connect');
+        if (btnWooting) {
+            btnWooting.addEventListener('click', async () => {
+                const connected = await WootingAnalog.requestDevice();
+                bio.analogActive = connected;
+                updateAnalogUI();
+            });
+        }
+    }
 });
 
 function handleKey(e) {
@@ -162,7 +186,20 @@ function handleKey(e) {
     // 2. Keystroke Dynamics
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !forbidden.includes(e.key)) {
         const now = Date.now();
-        
+
+        // Capture Wooting analog depth for this keystroke
+        let keystrokeDepth = null;
+        if (typeof WootingAnalog !== 'undefined' && WootingAnalog.isAvailable()) {
+            const hidCode = WootingAnalog.keyEventToHID(e);
+            if (hidCode !== null) {
+                keystrokeDepth = WootingAnalog.recordKeystrokeDepth(hidCode);
+                if (keystrokeDepth !== null) {
+                    bio.lastDepth = keystrokeDepth;
+                    bio.analogActive = true;
+                }
+            }
+        }
+
         if (bio.lastTime) {
             const delta = now - bio.lastTime;
             
@@ -189,8 +226,10 @@ function handleKey(e) {
         bio.lastTime = now;
         bio.lastChar = e.key;
 
-        // Record to ledger (store char for replay)
-        recordOp({ op: 'key', char: e.key });
+        // Record to ledger (store char for replay, include depth if available)
+        const opData = { op: 'key', char: e.key };
+        if (keystrokeDepth !== null) opData.depth = parseFloat(keystrokeDepth.toFixed(3));
+        recordOp(opData);
 
         session.humanChars++;
         passport.totalKeystrokes++;
@@ -229,13 +268,35 @@ function analyzeRhythm() {
     const botSpeed = avgFlow < 35; // Too fast
     const botLinearity = (bio.cognitiveRatio < 1.2 && session.humanChars > 100); // No thinking pauses
 
-    if (botRhythm || botSpeed || botLinearity) {
+    // --- WOOTING ANALOG DEPTH ANALYSIS ---
+    let depthBonus = 0;
+    let botFlatDepth = false;
+
+    if (typeof WootingAnalog !== 'undefined' && WootingAnalog.isAvailable()) {
+        const depthStats = WootingAnalog.getDepthStats();
+        if (depthStats) {
+            bio.avgDepth = depthStats.avgDepth;
+            bio.depthStdDev = depthStats.depthStdDev;
+
+            // Bot signal: unnaturally uniform pressure (stdDev < 0.03 across 20+ samples)
+            botFlatDepth = depthStats.depthStdDev < 0.03 && depthStats.sampleCount >= 20;
+
+            // Depth entropy bonus: reward natural pressure variation
+            const depthVarianceScore = Math.min(depthStats.depthStdDev * 100, 15);
+            const regionScore = Math.min(depthStats.regionVariance * 100, 15);
+            depthBonus = Math.round(depthVarianceScore + regionScore);
+
+            bio.depthEntropy = depthBonus;
+        }
+    }
+
+    if (botRhythm || botSpeed || botLinearity || botFlatDepth) {
         bio.isBot = true;
         bio.entropy = 0;
     } else {
         bio.isBot = false;
-        // Entropy Score combines Variance + Cognitive Ratio
-        bio.entropy = Math.min(Math.round(stdDev + (bio.cognitiveRatio * 10)), 100);
+        // Entropy = timing variance + cognitive ratio + analog depth bonus
+        bio.entropy = Math.min(Math.round(stdDev + (bio.cognitiveRatio * 10) + depthBonus), 100);
     }
 }
 
@@ -287,6 +348,18 @@ function updateDashboard() {
         elEntropy.style.color = (bio.cognitiveRatio < 1.5) ? '#FFD700' : '#00F0FF';
     }
 
+    // Update Wooting analog depth display
+    const elDepth = document.getElementById('depth-display');
+    const elDepthVar = document.getElementById('depth-var-display');
+    if (elDepth && bio.analogActive) {
+        elDepth.innerText = (bio.avgDepth * 100).toFixed(0) + '%';
+        elDepth.style.color = '#A855F7';
+    }
+    if (elDepthVar && bio.analogActive) {
+        elDepthVar.innerText = (bio.depthStdDev * 100).toFixed(1);
+        elDepthVar.style.color = bio.depthStdDev < 0.03 ? '#FF0055' : '#A855F7';
+    }
+
     if(elPurity) {
         if (bio.isBot) {
             elPurity.innerText = "SYNTHETIC";
@@ -320,8 +393,10 @@ function updateDashboard() {
 function resetSession() {
     if(confirm("Reset Session?")) {
         session = { humanChars: 0, alienChars: 0, startTime: Date.now() };
-        bio.flowIntervals = []; bio.gapIntervals = []; bio.lastTime = null; bio.isBot = false; 
+        bio.flowIntervals = []; bio.gapIntervals = []; bio.lastTime = null; bio.isBot = false;
         bio.backspaces = 0; bio.navigates = 0; bio.lastChar = '';
+        bio.avgDepth = 0; bio.depthStdDev = 0; bio.depthEntropy = 0; bio.lastDepth = 0;
+        if (typeof WootingAnalog !== 'undefined') WootingAnalog.resetData();
         document.getElementById('editor').innerHTML = '';
         updateDashboard();
     }
@@ -366,7 +441,13 @@ async function exportBadge() {
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
     }
 
-    // Payload includes Cognitive Ratio (CR) + Passport Data + Crypto
+    // Gather Wooting analog depth stats if available
+    let analogData = null;
+    if (typeof WootingAnalog !== 'undefined' && WootingAnalog.isAvailable()) {
+        analogData = WootingAnalog.getDepthStats();
+    }
+
+    // Payload includes Cognitive Ratio (CR) + Passport Data + Analog + Crypto
     const payload = {
         version: '2.0',
         type: 'project',
@@ -379,6 +460,14 @@ async function exportBadge() {
         cr: bio.cognitiveRatio.toFixed(2), // The Loki Metric
         entropy: bio.entropy,
         date: date,
+        // Wooting Analog depth data
+        analogProfile: analogData ? 'wooting' : null,
+        avgDepth: analogData ? analogData.avgDepth : null,
+        depthStdDev: analogData ? analogData.depthStdDev : null,
+        depthRange: analogData ? analogData.depthRange : null,
+        bottomOutRate: analogData ? analogData.bottomOutRate : null,
+        regionVariance: analogData ? analogData.regionVariance : null,
+        depthEntropy: bio.depthEntropy || 0,
         // Passport data
         passport: passport.totalKeystrokes,
         passportLevel: passport.level,
@@ -460,7 +549,11 @@ async function exportLedger() {
                 backspaces: bio.backspaces,
                 cognitiveRatio: bio.cognitiveRatio,
                 entropy: bio.entropy,
-                isBot: bio.isBot
+                isBot: bio.isBot,
+                analogProfile: bio.analogActive ? 'wooting' : null,
+                avgDepth: bio.analogActive ? bio.avgDepth : null,
+                depthStdDev: bio.analogActive ? bio.depthStdDev : null,
+                depthEntropy: bio.depthEntropy || 0
             }
         },
         // Checkpoints are the backbone of replay — content at every 10 ops
@@ -595,6 +688,28 @@ function setupToolbar() {
     const ed = document.getElementById('editor');
     if(fSelect && ed) fSelect.addEventListener('change', (e) => { ed.className = ed.className.replace(/font-\w+/, '') + ' ' + e.target.value; });
     if(sSelect && ed) sSelect.addEventListener('change', (e) => { ed.className = ed.className.replace(/spacing-\w+/, '') + ' ' + e.target.value; });
+}
+
+function updateAnalogUI() {
+    const statusEl = document.getElementById('wooting-status');
+    const btnConnect = document.getElementById('btn-wooting-connect');
+    const analogBox = document.getElementById('analog-stats');
+
+    if (bio.analogActive) {
+        if (statusEl) {
+            statusEl.innerText = 'Connected';
+            statusEl.style.color = '#A855F7';
+        }
+        if (btnConnect) btnConnect.style.display = 'none';
+        if (analogBox) analogBox.style.display = 'block';
+    } else {
+        if (statusEl) {
+            statusEl.innerText = 'Not detected';
+            statusEl.style.color = '#666';
+        }
+        if (btnConnect) btnConnect.style.display = 'block';
+        if (analogBox) analogBox.style.display = 'none';
+    }
 }
 
 function setupAuthHandlers() {

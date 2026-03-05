@@ -1,0 +1,208 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 320px;
+    min-height: 400px;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0a0a0a;
+    color: #fff;
+    overflow-x: hidden;
+}
+
+.container {
+    padding: 16px;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    padding: 12px 0 20px;
+    border-bottom: 1px solid #222;
+    margin-bottom: 16px;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 700;
+    color: #00F0FF;
+    margin-bottom: 4px;
+    letter-spacing: 2px;
+}
+
+.tagline {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Sections */
+.section {
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+/* Status */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.dot.active {
+    background: #00F0FF;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+    animation: pulse 2s infinite;
+}
+
+.dot.inactive {
+    background: #444;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Stats */
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 12px;
+    color: #aaa;
+    border-bottom: 1px solid #1a1a1a;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-value {
+    color: #fff;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 20px;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+}
+
+/* Passport Card */
+.passport-card {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 14px;
+}
+
+.passport-level {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.level-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #00F0FF 0%, #0080FF 100%);
+    color: #000;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* Buttons */
+.btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.btn-primary {
+    background: #00F0FF;
+    color: #000;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #00d4e6;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+    background: #1a3a3d;
+    color: #446;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #333;
+}
+
+.btn-secondary:hover {
+    background: #222;
+    border-color: #00F0FF;
+    color: #00F0FF;
+}
+
+/* Footer */
+.footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1px solid #222;
+    margin-top: 20px;
+}
+
+.footer a {
+    font-size: 11px;
+    color: #666;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer a:hover {
+    color: #00F0FF;
+}
