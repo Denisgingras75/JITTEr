@@ -1,25 +1,24 @@
-/**
- * Playwright configuration for JITTEr extension testing
- */
+const { defineConfig } = require('@playwright/test');
 
-module.exports = {
-    testDir: './tests',
-    timeout: 60000,
-    retries: 0,
-    workers: 1, // Run tests sequentially
-    use: {
-        headless: false, // Extensions require headed mode
-        viewport: { width: 1280, height: 720 },
-        screenshot: 'only-on-failure',
-        video: 'retain-on-failure'
+module.exports = defineConfig({
+  testDir: './tests',
+  timeout: 60000,
+  retries: 0,
+  use: {
+    headless: true,
+    viewport: { width: 1280, height: 800 },
+    actionTimeout: 10000,
+    baseURL: `file://${__dirname}`,
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        launchOptions: {
+          executablePath: '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',
+        },
+      },
     },
-    projects: [
-        {
-            name: 'chromium',
-            use: {
-                browserName: 'chromium',
-                channel: 'chrome'
-            }
-        }
-    ]
-};
+  ],
+});

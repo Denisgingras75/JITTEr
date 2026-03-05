@@ -12,7 +12,9 @@ Thumbs.db
 # Chrome extension generated files
 *.crx
 *.pem
+
+# Node.js
 node_modules/
-package-lock.json
-node_modules/
-*.bak
+
+# Test artifacts
+test-results/

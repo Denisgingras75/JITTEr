@@ -2,19 +2,28 @@
   "name": "jitter",
   "version": "1.0.0",
   "description": "**J**itter **I**ntegrity **T**racking & **T**yping **E**ntropy **R**ecognition",
-  "main": "background.js",
+  "main": "auth-utils.js",
+  "directories": {
+    "doc": "docs"
+  },
   "scripts": {
-    "test": "node tests/manual-test.js"
+    "test": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test",
+    "test:student": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/student-essay.spec.js",
+    "test:teacher": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/teacher-verify.spec.js",
+    "test:chain": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/badge-chain.spec.js",
+    "test:ledger": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/ledger-replay.spec.js",
+    "test:bot": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/bot-detection.spec.js",
+    "test:paste": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/paste-detection.spec.js"
   },
   "repository": {
     "type": "git",
-    "url": "http://local_proxy@127.0.0.1:60234/git/Denisgingras75/JITTEr"
+    "url": "http://local_proxy@127.0.0.1:30378/git/Denisgingras75/JITTEr"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "playwright": "^1.58.2"
+    "@playwright/test": "^1.52.0",
+    "playwright-core": "^1.52.0"
   }
 }
