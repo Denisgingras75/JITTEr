@@ -255,136 +255,6 @@
             color: #FF0055;
             text-align: center;
         }
-
-        /* Baseball Card Styles */
-        .baseball-card {
-            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a0a 100%);
-            border: 2px solid #FFD700;
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 20px;
-            position: relative;
-            overflow: hidden;
-        }
-        .baseball-card::before {
-            content: '';
-            position: absolute;
-            top: 0; right: 0;
-            width: 120px; height: 120px;
-            background: radial-gradient(circle at top right, #FFD70011 0%, transparent 70%);
-        }
-        .war-hero {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #333;
-        }
-        .war-number {
-            font-size: 56px;
-            font-weight: 900;
-            font-family: 'Courier New', monospace;
-            line-height: 1;
-        }
-        .war-details {
-            flex: 1;
-        }
-        .war-label {
-            font-size: 10px;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        .war-tier-text {
-            font-size: 18px;
-            font-weight: bold;
-            margin-top: 4px;
-        }
-        .stat-grid-compact {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .stat-cell {
-            background: #111;
-            border: 1px solid #222;
-            border-radius: 4px;
-            padding: 10px;
-            text-align: center;
-        }
-        .stat-cell-label {
-            font-size: 9px;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 4px;
-        }
-        .stat-cell-value {
-            font-size: 18px;
-            font-weight: bold;
-            font-family: 'Courier New', monospace;
-            color: #fff;
-        }
-        .stat-cell-sub {
-            font-size: 10px;
-            color: #666;
-            margin-top: 2px;
-        }
-        .section-divider {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 25px 0 15px 0;
-        }
-        .section-divider-line {
-            flex: 1;
-            height: 1px;
-            background: #333;
-        }
-        .section-divider-text {
-            font-size: 11px;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: bold;
-        }
-        .consistency-bar {
-            width: 100%;
-            height: 6px;
-            background: #222;
-            border-radius: 3px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        .consistency-fill {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-        .digraph-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 10px;
-        }
-        .digraph-chip {
-            background: #111;
-            border: 1px solid #222;
-            border-radius: 3px;
-            padding: 4px 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-        }
-        .digraph-pair {
-            color: #00F0FF;
-            font-weight: bold;
-        }
-        .digraph-time {
-            color: #888;
-            margin-left: 4px;
-        }
     </style>
 </head>
 <body>
@@ -394,7 +264,7 @@
                 <span>⚡</span>
                 <span>JITTER VERIFICATION</span>
             </h1>
-            <p>Teacher Dashboard - Baseball Card Stats & Badge Verification</p>
+            <p>Teacher Dashboard - Verify Student Badges</p>
         </div>
 
         <div class="input-section">
@@ -493,221 +363,119 @@
                     ? `<div style="background:#FF005511;border:2px solid #FF0055;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🚨</span><div><div style="font-weight:bold;color:#FF0055;">SIGNATURE INVALID — Badge may be forged</div><div style="font-size:12px;color:#888;margin-top:2px;">The cryptographic signature does not match the payload.</div></div></div>`
                     : `<div style="background:#FFD70011;border:2px solid #FFD700;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">⚠️</span><div><div style="font-weight:bold;color:#FFD700;">UNSIGNED BADGE — No cryptographic proof</div><div style="font-size:12px;color:#888;margin-top:2px;">Data is readable but authenticity cannot be confirmed.</div></div></div>`;
 
-                const headerTitle = cryptoStatus === 'valid' ? 'Badge Verified' : cryptoStatus === 'invalid' ? 'Badge Invalid' : 'Badge Decoded (Unsigned)';
-
-                // WAR tier calculation
-                const war = data.war || 0;
-                let warColor = '#FF0055', warTier = 'Suspicious', warIcon = '🚩';
-                if (war >= 8.0) { warColor = '#FFD700'; warTier = 'Hall of Fame'; warIcon = '⭐'; }
-                else if (war >= 6.0) { warColor = '#00F0FF'; warTier = 'All-Star'; warIcon = '✅'; }
-                else if (war >= 4.0) { warColor = '#4488FF'; warTier = 'Solid'; warIcon = '🔷'; }
-                else if (war >= 2.0) { warColor = '#FFD700'; warTier = 'Rookie'; warIcon = '⚠️'; }
-
-                // Account age formatting
-                const ageDays = data.accountAge || 0;
-                let ageDisplay = ageDays + ' days';
-                if (ageDays >= 365) ageDisplay = (ageDays / 365).toFixed(1) + ' yrs';
-                else if (ageDays >= 30) ageDisplay = Math.floor(ageDays / 30) + ' mo';
+                const headerTitle = cryptoStatus === 'valid' ? 'Badge Verified ✅' : cryptoStatus === 'invalid' ? 'Badge Invalid ❌' : 'Badge Decoded (Unsigned)';
 
                 let html = `
-                    <!-- BASEBALL CARD: WAR Hero Section -->
-                    <div class="baseball-card">
-                        <div class="war-hero">
-                            <div>
-                                <div class="war-number" style="color:${warColor}">${war > 0 ? war.toFixed(1) : '—'}</div>
-                                <div class="war-label">WAR</div>
-                            </div>
-                            <div class="war-details">
-                                <div class="war-tier-text" style="color:${warColor}">${warIcon} ${warTier}</div>
-                                <div style="font-size:12px; color:#888; margin-top:4px;">Writer Authenticity Rating</div>
-                            </div>
-                            <div class="risk-badge ${riskClass}" style="margin-left:auto;">
-                                ${riskEmoji} ${riskText}
+                    <div class="result-card">
+                        <div class="result-header">
+                            <h2 style="margin:0; color:#fff;">${headerTitle}</h2>
+                            <div class="risk-badge ${riskClass}">
+                                ${riskEmoji} ${riskText} (${suspicionScore}/100)
                             </div>
                         </div>
                         ${cryptoBanner}
 
-                        <!-- Career Overview Grid -->
-                        <div class="stat-grid-compact">
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Career Keys</div>
-                                <div class="stat-cell-value" style="color:#FFD700">${formatNumber(data.passport || 0)}</div>
-                                <div class="stat-cell-sub">${data.passportLevel || 'Novice'}</div>
+                        <div class="metric-grid">
+                            <div class="metric">
+                                <div class="metric-label">Session Integrity</div>
+                                <div class="metric-value" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity}%
+                                </div>
+                                <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity >= 80 ? '✅ Clean' : '⚠️ Review'}
+                                </div>
                             </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Account Age</div>
-                                <div class="stat-cell-value" style="color:${ageDays >= 30 ? '#00F0FF' : '#FFD700'}">${ageDisplay}</div>
-                                <div class="stat-cell-sub">${ageDays >= 30 ? 'Established' : 'New'}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Sessions</div>
-                                <div class="stat-cell-value">${data.sessions || 0}</div>
-                                <div class="stat-cell-sub">completed</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Career Purity</div>
-                                <div class="stat-cell-value" style="color:${(data.careerPurity || 0) >= 0.9 ? '#00F0FF' : '#FFD700'}">.${String(Math.round((data.careerPurity || 0) * 1000)).padStart(3, '0')}</div>
-                                <div class="stat-cell-sub">lifetime</div>
-                            </div>
-                        </div>
 
-                        <!-- Career Stats Row 2 -->
-                        <div class="stat-grid-compact">
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Career WPM</div>
-                                <div class="stat-cell-value">${data.careerWpm || '—'}</div>
-                                <div class="stat-cell-sub">avg speed</div>
+                            <div class="metric">
+                                <div class="metric-label">Cognitive Ratio</div>
+                                <div class="metric-value" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.cr}
+                                </div>
+                                <div class="metric-status" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.cr >= 1.5 ? '✅ Human-like' : '⚠️ Low variance'}
+                                </div>
                             </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Career CR</div>
-                                <div class="stat-cell-value" style="color:${(data.careerCR || 0) >= 1.5 ? '#00F0FF' : '#FFD700'}">${data.careerCR || '—'}</div>
-                                <div class="stat-cell-sub">cog. ratio</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Streak</div>
-                                <div class="stat-cell-value">${data.streak || 0}d</div>
-                                <div class="stat-cell-sub">best: ${data.longestStreak || 0}d</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Error Rate</div>
-                                <div class="stat-cell-value">${data.careerErrorRate || '—'}</div>
-                                <div class="stat-cell-sub">per 100 keys</div>
-                            </div>
-                        </div>
 
-                        <!-- Consistency Checks -->
-                        <div class="section-divider">
-                            <div class="section-divider-line"></div>
-                            <div class="section-divider-text">Consistency Check</div>
-                            <div class="section-divider-line"></div>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                                    <span style="color:#888">Rhythm Signature</span>
-                                    <span style="color:${(data.rhythmSignature || 0) >= 70 ? '#00F0FF' : '#FFD700'}">${data.rhythmSignature || 0}%</span>
+                            <div class="metric">
+                                <div class="metric-label">Total Keystrokes</div>
+                                <div class="metric-value" style="color: #FFD700">
+                                    ${formatNumber(data.passport || 0)}
                                 </div>
-                                <div class="consistency-bar">
-                                    <div class="consistency-fill" style="width:${data.rhythmSignature || 0}%; background:${(data.rhythmSignature || 0) >= 70 ? '#00F0FF' : '#FFD700'}"></div>
+                                <div class="metric-status" style="color: #FFD700">
+                                    ${data.passportLevel || 'Unknown'}
                                 </div>
                             </div>
-                            <div>
-                                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                                    <span style="color:#888">Consistency Index</span>
-                                    <span style="color:${(data.consistencyIndex || 0) >= 60 ? '#00F0FF' : '#FFD700'}">${data.consistencyIndex || 0}%</span>
+
+                            <div class="metric">
+                                <div class="metric-label">Account Age</div>
+                                <div class="metric-value" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.accountAge || 0}
                                 </div>
-                                <div class="consistency-bar">
-                                    <div class="consistency-fill" style="width:${data.consistencyIndex || 0}%; background:${(data.consistencyIndex || 0) >= 60 ? '#00F0FF' : '#FFD700'}"></div>
+                                <div class="metric-status" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
+                                    ${(data.accountAge || 0) >= 30 ? '✅ Established' : '⚠️ New account'}
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- SESSION BOX SCORE -->
-                    <div class="result-card">
-                        <div class="result-header">
-                            <h2 style="margin:0; color:#fff;">Session Box Score</h2>
-                            <span style="color:#888; font-size:13px;">${data.date || 'Unknown'}</span>
-                        </div>
-
-                        <div class="stat-grid-compact">
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Purity</div>
-                                <div class="stat-cell-value" style="color:${(data.sessionPurity || data.purity/100) >= 0.9 ? '#00F0FF' : '#FF0055'}">.${String(Math.round((data.sessionPurity || data.purity/100) * 1000)).padStart(3, '0')}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Cog. Ratio</div>
-                                <div class="stat-cell-value" style="color:${(data.sessionCR || data.cr) >= 1.5 ? '#00F0FF' : '#FFD700'}">${data.sessionCR || data.cr}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Entropy</div>
-                                <div class="stat-cell-value">${data.sessionEntropy || data.entropy || 0}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">WPM</div>
-                                <div class="stat-cell-value">${data.sessionWpm || '—'}</div>
-                            </div>
-                        </div>
-
-                        <div class="stat-grid-compact">
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Edit Rate</div>
-                                <div class="stat-cell-value">${data.editRate !== undefined ? (data.editRate * 100).toFixed(1) + '%' : '—'}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Focus Time</div>
-                                <div class="stat-cell-value" style="color:${(data.focusTime || 0) >= 0.5 ? '#00F0FF' : '#FFD700'}">${data.focusTime !== undefined ? Math.round(data.focusTime * 100) + '%' : '—'}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Paste Events</div>
-                                <div class="stat-cell-value" style="color:${(data.pasteEvents || 0) === 0 ? '#00F0FF' : '#FF0055'}">${data.pasteEvents || 0}</div>
-                            </div>
-                            <div class="stat-cell">
-                                <div class="stat-cell-label">Burst Rate</div>
-                                <div class="stat-cell-value">${data.burstRate || '—'}</div>
-                            </div>
-                        </div>
-
-                        <!-- Advanced Metrics -->
-                        <div class="section-divider">
-                            <div class="section-divider-line"></div>
-                            <div class="section-divider-text">Advanced Metrics</div>
-                            <div class="section-divider-line"></div>
-                        </div>
-
+                        <div class="section-header">SESSION DETAILS</div>
                         <div class="info-row">
-                            <span class="info-label">Session Keystrokes</span>
+                            <span class="info-label">Date Submitted</span>
+                            <span class="info-value">${data.date || 'Unknown'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Session Keys</span>
                             <span class="info-value">${formatNumber(data.keys || 0)}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Active Time</span>
-                            <span class="info-value">${data.activeMinutes || '—'} min / ${data.totalMinutes || '—'} min total</span>
+                            <span class="info-label">Human Edits</span>
+                            <span class="info-value">${data.edits || 0}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Peak WPM</span>
-                            <span class="info-value">${data.peakWpm || '—'}</span>
+                            <span class="info-label">Entropy Score</span>
+                            <span class="info-value">${data.entropy || 0}/100</span>
                         </div>
-                        <div class="info-row">
-                            <span class="info-label">Dwell Signature</span>
-                            <span class="info-value">${data.dwellMean ? data.dwellMean + 'ms (±' + data.dwellStdDev + 'ms)' : '—'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Correction Speed</span>
-                            <span class="info-value">${data.correctionSpeed ? data.correctionSpeed + 'ms' : '—'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Flow State Index</span>
-                            <span class="info-value">${data.flowStateIndex || '—'} keystrokes</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Error Rate</span>
-                            <span class="info-value">${data.errorRate !== undefined ? data.errorRate + ' per 100 keys' : '—'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Warm-Up Curve</span>
-                            <span class="info-value">${data.warmUpCurve ? data.warmUpCurve + 'x' : '—'}</span>
-                        </div>
-                        ${data.pasteVolume !== undefined ? `<div class="info-row">
-                            <span class="info-label">Paste Volume</span>
-                            <span class="info-value" style="color:${data.pasteVolume > 0.2 ? '#FF0055' : '#00F0FF'}">${(data.pasteVolume * 100).toFixed(1)}%</span>
-                        </div>` : ''}
 
-                        ${data.digraphDNA && Object.keys(data.digraphDNA).length > 0 ? `
-                        <div class="section-divider">
-                            <div class="section-divider-line"></div>
-                            <div class="section-divider-text">Digraph DNA</div>
-                            <div class="section-divider-line"></div>
+                        ${data.analogProfile ? `
+                        <div class="section-header" style="color:#A855F7;">ANALOG DEPTH BIOMETRICS</div>
+                        <div style="background:#A855F711;border:2px solid #A855F7;border-radius:6px;padding:12px 16px;margin-bottom:15px;display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:20px;">🎹</span>
+                            <div>
+                                <div style="font-weight:bold;color:#A855F7;">Wooting Analog Keyboard Verified</div>
+                                <div style="font-size:12px;color:#888;margin-top:2px;">Per-key depth biometrics captured via Hall Effect sensors</div>
+                            </div>
                         </div>
-                        <div class="digraph-grid">
-                            ${Object.entries(data.digraphDNA).map(([pair, ms]) =>
-                                `<div class="digraph-chip"><span class="digraph-pair">${pair}</span><span class="digraph-time">${ms}ms</span></div>`
-                            ).join('')}
+                        <div class="metric-grid">
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Avg Depth</div>
+                                <div class="metric-value" style="color:#A855F7">${Math.round((data.avgDepth || 0) * 100)}%</div>
+                                <div class="metric-status" style="color:#A855F7">
+                                    ${(data.avgDepth || 0) > 0.3 && (data.avgDepth || 0) < 0.9 ? '✅ Natural range' : '⚠️ Review'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Depth Variance</div>
+                                <div class="metric-value" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">${((data.depthStdDev || 0) * 100).toFixed(1)}</div>
+                                <div class="metric-status" style="color:${(data.depthStdDev || 0) >= 0.03 ? '#A855F7' : '#FF0055'}">
+                                    ${(data.depthStdDev || 0) >= 0.03 ? '✅ Human variation' : '⚠️ Flat (bot-like)'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Finger Variation</div>
+                                <div class="metric-value" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">${((data.regionVariance || 0) * 100).toFixed(1)}</div>
+                                <div class="metric-status" style="color:${(data.regionVariance || 0) >= 0.02 ? '#A855F7' : '#FFD700'}">
+                                    ${(data.regionVariance || 0) >= 0.02 ? '✅ Per-finger patterns' : '⚠️ Uniform pressure'}
+                                </div>
+                            </div>
+                            <div class="metric" style="border-color:#A855F744;">
+                                <div class="metric-label">Bottom-Out Rate</div>
+                                <div class="metric-value" style="color:#A855F7">${Math.round((data.bottomOutRate || 0) * 100)}%</div>
+                                <div class="metric-status" style="color:#888">
+                                    Depth entropy: +${data.depthEntropy || 0}
+                                </div>
+                            </div>
                         </div>
                         ` : ''}
-                    </div>
 
-                    <!-- PASSPORT PROFILE (Legacy section) -->
-                    <div class="result-card">
                         <div class="section-header">PASSPORT PROFILE</div>
                         <div class="info-row">
                             <span class="info-label">Lifetime Keystrokes</span>
@@ -750,25 +518,26 @@
                             <div class="alert-title">⚠️ SUSPICIOUS PATTERNS DETECTED</div>
                             ${data.avgDailyKeys > 3000 ? '<div class="alert-item">High daily output (' + formatNumber(data.avgDailyKeys) + ' keys/day)</div>' : ''}
                             ${data.accountAge < 7 && data.passport > 5000 ? '<div class="alert-item">New account with suspiciously high output</div>' : ''}
-                            ${(data.cr || data.sessionCR) < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
+                            ${data.cr < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
                             ${data.integrity < 80 ? '<div class="alert-item">High paste percentage</div>' : ''}
-                            ${(data.errorRate || 0) < 0.5 && (data.keys || 0) > 500 ? '<div class="alert-item">Suspiciously low error rate</div>' : ''}
-                            ${(data.rhythmSignature || 0) < 30 && (data.sessions || 0) > 5 ? '<div class="alert-item">Rhythm does not match career profile</div>' : ''}
+                            ${data.analogProfile && data.depthStdDev < 0.03 ? '<div class="alert-item">Uniform analog depth — mechanical input suspected</div>' : ''}
+                            ${data.analogProfile && data.regionVariance < 0.02 ? '<div class="alert-item">No per-finger pressure variation</div>' : ''}
                             <div style="margin-top:10px; font-size:12px; color:#ddd;">
                                 Recommendation: Review this submission manually
                             </div>
                         </div>
                     `;
                 } else if (suspicionScore < 20 && cryptoStatus === 'valid') {
+                    const analogBoost = data.analogProfile ? ' Analog depth biometrics provide additional hardware-verified confidence.' : '';
                     html += `
                         <div class="success-box">
-                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.
+                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.${analogBoost}
                         </div>
                     `;
                 } else if (suspicionScore < 20 && cryptoStatus === 'unsigned') {
                     html += `
                         <div class="success-box" style="background:#FFD70011;border-color:#FFD700;color:#FFD700;">
-                            ⚠️ Metrics look human, but no cryptographic proof. Ask student to re-submit using Jitter v3.0.
+                            ⚠️ Metrics look human, but no cryptographic proof. Ask student to re-submit using Jitter v2.0.
                         </div>
                     `;
                 }

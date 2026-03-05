@@ -1,43 +1,26 @@
 {
   "manifest_version": 3,
-  "name": "JITTEr - Prove Your Writing is Human",
-  "version": "3.0.0",
-  "description": "Sign your articles with cryptographic proof of human authorship. Works on Medium, Substack, Google Docs, and everywhere you write.",
-
-  "permissions": [
-    "storage",
-    "clipboardWrite",
-    "activeTab"
-  ],
-
+  "name": "Jitter Protocol",
+  "version": "2.0",
+  "description": "Biometric Content Verification & Integrity Analysis",
+  "permissions": ["storage", "clipboardWrite", "identity"],
   "host_permissions": [
-    "<all_urls>"
+    "https://*.firebaseapp.com/*",
+    "https://*.googleapis.com/*",
+    "https://www.gstatic.com/*"
   ],
-
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    },
-    "default_title": "JITTEr - Sign Your Work"
+    "default_title": "Open Jitter Writer"
   },
-
   "background": {
     "service_worker": "background.js"
   },
-
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": [
-        "utils/biometrics.js",
-        "content.js"
-      ],
-      "css": ["content.css"],
-      "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true,
+      "js": ["crypto-utils.js", "passport-utils.js", "wooting-analog.js", "content.js"],
+      "run_at": "document_idle"
     }
   ]
 }
