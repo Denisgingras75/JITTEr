@@ -1,62 +1,72 @@
 # JITTEr — Project Context for Claude
 
 ## What This Is
-Human typing verification. Proves text was physically typed by a real human using keystroke biometrics (timing, rhythm, corrections) — never the content itself. Patent pending.
+Behavioral biometrics widget that proves a human typed something. Not AI detection. Not a CAPTCHA. A process receipt.
 
-## Core Thesis
-"Make authenticity cheaper than faking it." Time is the moat. Being real costs nothing (just type). Being fake costs more every day. This is proof-of-work for text.
+**The one-liner:** "Elon's checkmark but not useless."
+
+**Core thesis:** Bots can fake a session. They cannot economically maintain consistent human-like profiles across months. Time is the moat.
+
+**Patents:** #63/994,858 (base, 2026-03-02) + #63/997,498 (CIP, 2026-03-05)
+
+## Read MASTER-PLAN.md for:
+- Full widget spec (jitter-widget.js build target)
+- WAR formula with signal weights
+- Time confidence cap table
+- Paste weighting rules
+- Passport card layout
+- Integration API (script tag, config, React)
+- Badge v3.0 JSON spec
+- Priority order + "what done looks like" checklist
+
+**Read it when building the widget or touching the engine. Skip it for small fixes.**
 
 ## Repo Structure
 ```
-extension/        Chrome extension (THE PRODUCT)
-  src/            JS modules: biometrics, content, crypto, passport, writer, auth, popup, verifier
-  icons/          16/48/128px
-  *.html          writer, verify, popup, verifier
+extension/        Chrome extension
+  src/            biometrics, content, crypto, passport, writer, auth, popup, verifier
   manifest.json   Manifest V3
 lab/              Algorithm proving ground
   jitter-box.js   CANONICAL ENGINE (WAR scorer, 9 signals, K-S, Pearson)
   algo/           matching engine, runners, generators
   botfarm/        5 Playwright adversarial personas
-  results/        simulation results + report
-sdk/              Embeddable widget (scaffold)
+sdk/              Embeddable widget (CURRENT BUILD TARGET)
 android/          Anvil Keyboard (Kotlin IME POC)
 tests/            10 test files
 docs/             security, business, architecture, plans
-patent/           Both provisional specs + filing guides + receipt
+patent/           Both provisional specs + filing guides
 research/         20+ research docs
-archive/          All previous versions (v1-v5, anvil files, proof of work)
+archive/          All previous versions (proof of work)
 ```
 
-## Two Engines — IMPORTANT
-- `lab/jitter-box.js` = CANONICAL. WAR scorer, 9 signals, K-S test, Pearson correlation. 616 lines. Use this.
-- `extension/src/biometrics.js` = WEAK. Only 3 simple bot checks. Needs to be replaced with jitter-box.js.
+## Two Engines
+- `lab/jitter-box.js` = CANONICAL. WAR scorer, 9 signals, K-S test, Pearson. 616 lines. Use this.
+- `extension/src/biometrics.js` = LEGACY. Only 3 simple checks. Being replaced.
 
-## Key Rules
-- NEVER say "AI detector" — say "human verification" or "proof of human typing process"
-- NEVER claim bulletproof — claim economically irrational to fake at scale
-- Content is NEVER captured or transmitted. Only keystroke timing metadata.
-- All IP owned by Denis Gingras. See IP_DECLARATION.md.
-- Patent filed: provisional #63/994,858 (2026-03-02) + CIP #63/997,498 (2026-03-05)
+## Hard Rules
+1. **Never store raw keystrokes.** Timing metadata only.
+2. **Never say "AI detector"** — say "human verification" or "proof of human typing process"
+3. **Never claim bulletproof** — claim economically irrational to fake at scale
+4. **Badge must be cryptographically signed** (ECDSA P-256)
+5. **Paste is transparent, not punished** — users paste quotes, URLs, names. Normal.
+6. **jitter-box.js is the canonical engine.** biometrics.js is legacy. Port, don't fork.
+7. All IP owned by Denis Gingras. See IP_DECLARATION.md.
 
 ## Known Gaps
-- Extension uses weak biometrics.js instead of WAR scorer (swap in progress)
-- Auth has Firebase placeholder keys (switching to Supabase)
-- 61% cross-user false match rate (uses only mean_inter_key for identity)
-- Time-weighted confidence scoring not implemented (core thesis has minimal code)
-- No server-side verification API
-- Not listed on Chrome Web Store
+- Extension uses weak biometrics.js (swap in progress on hawk/biometrics-swap branch)
+- Auth has Firebase placeholder keys (Supabase swap on orca/supabase-auth branch)
+- 61% cross-user false match rate (fixed in lab, not ported to extension)
+- verify.html calls badge decode but never calls verifyBadge() (20-line fix)
+- Suspicion score calculated but never embedded in badges
+- Three badge formats exist — unify to v3.0 spec (see MASTER-PLAN.md)
 
-## Key Files to Read First
-1. This file
+## Key Files
+1. `MASTER-PLAN.md` — full build bible (widget spec, WAR formula, API)
 2. `JITTER_FOUNDATIONS.md` — 610-line product bible
 3. `lab/jitter-box.js` — the real engine
 4. `extension/src/content.js` — Chrome content script, protocol v10.0
 5. `docs/security/RED_TEAM.md` — attack surface analysis
 
 ## Backend
-Moving to Supabase (consistent with WGH stack). Firebase auth-utils.js has placeholder keys — do not ship as-is.
-
-## Framing
-- Think credit bureau for typing, not antivirus for text
-- The product is the data flywheel, not just the tool
-- Publish averages, keep distributions private (like Visa fraud detection)
+Supabase (consistent with WGH). Firebase auth-utils.js has placeholder keys — do not ship.
+Dan IP conversation needed in writing before WGH integration.
