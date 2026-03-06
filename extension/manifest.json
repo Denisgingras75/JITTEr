@@ -3,11 +3,9 @@
   "name": "Jitter Protocol",
   "version": "2.0",
   "description": "Biometric Content Verification & Integrity Analysis",
-  "permissions": ["storage", "clipboardWrite", "identity"],
+  "permissions": ["storage", "clipboardWrite"],
   "host_permissions": [
-    "https://*.firebaseapp.com/*",
-    "https://*.googleapis.com/*",
-    "https://www.gstatic.com/*"
+    "https://*.supabase.co/*"
   ],
   "action": {
     "default_title": "Open Jitter Writer"

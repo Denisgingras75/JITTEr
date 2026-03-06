@@ -1,5 +1,5 @@
 /**
- * auth-utils.js - Firebase Authentication & Cloud Sync for JITTEr Passport
+ * auth-utils.js - Supabase Authentication & Cloud Sync for JITTEr Passport
  *
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  *
@@ -13,57 +13,77 @@
  */
 
 const AuthUtils = (() => {
-    // Firebase Configuration
-    // IMPORTANT: Replace these with your actual Firebase project config
-    // Get this from Firebase Console → Project Settings → Web App
-    const firebaseConfig = {
-        apiKey: "YOUR_API_KEY_HERE",
-        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
-    };
+    // Supabase Configuration
+    // IMPORTANT: Replace these with your actual Supabase project config
+    // Get this from Supabase Dashboard → Settings → API
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL_HERE';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
 
-    let auth = null;
-    let db = null;
+    let supabase = null;
     let currentUser = null;
     let lastSyncTime = null;
+    let authSubscription = null;
 
-    // Initialize Firebase
+    // Initialize Supabase
     async function init() {
         try {
-            // Check if Firebase is loaded
-            if (typeof firebase === 'undefined') {
-                console.error('Firebase SDK not loaded');
+            if (typeof window.supabase === 'undefined' &&
+                typeof globalThis.supabaseClient === 'undefined') {
+                console.error('Supabase SDK not loaded');
                 return false;
             }
 
-            // Initialize Firebase App
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
+            const createClient = window.supabase?.createClient ||
+                                 globalThis.supabaseClient?.createClient;
+
+            if (!createClient) {
+                console.error('Supabase createClient not found');
+                return false;
             }
 
-            auth = firebase.auth();
-            db = firebase.firestore();
+            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                auth: {
+                    storage: {
+                        getItem: (key) => new Promise((resolve) => {
+                            chrome.storage.local.get([key], (data) => resolve(data[key] || null));
+                        }),
+                        setItem: (key, value) => new Promise((resolve) => {
+                            chrome.storage.local.set({ [key]: value }, resolve);
+                        }),
+                        removeItem: (key) => new Promise((resolve) => {
+                            chrome.storage.local.remove(key, resolve);
+                        })
+                    },
+                    autoRefreshToken: true,
+                    persistSession: true,
+                    detectSessionInUrl: false
+                }
+            });
 
             // Listen for auth state changes
-            auth.onAuthStateChanged((user) => {
-                currentUser = user;
+            const { data } = supabase.auth.onAuthStateChange((event, session) => {
+                currentUser = session?.user || null;
                 updateAuthUI();
 
-                if (user) {
-                    console.log('User logged in:', user.email);
-                    // Auto-sync on login
+                if (currentUser) {
+                    console.log('User logged in:', currentUser.email);
                     syncFromCloud().catch(err => console.error('Auto-sync failed:', err));
                 } else {
                     console.log('User logged out');
                 }
             });
+            authSubscription = data.subscription;
+
+            // Check for existing session
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData.session) {
+                currentUser = sessionData.session.user;
+                updateAuthUI();
+            }
 
             return true;
         } catch (error) {
-            console.error('Firebase init error:', error);
+            console.error('Supabase init error:', error);
             return false;
         }
     }
@@ -71,31 +91,41 @@ const AuthUtils = (() => {
     // Sign up new user
     async function signup(email, password) {
         try {
-            const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-            currentUser = userCredential.user;
-
-            // Initialize cloud passport document
-            await db.collection('passports').doc(currentUser.uid).set({
-                email: email,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                passport: {
-                    totalKeystrokes: 0,
-                    level: "Novice",
-                    firstUsed: Date.now(),
-                    lastUsed: Date.now(),
-                    sessionsCompleted: 0,
-                    dailyStats: {},
-                    hourlyPattern: new Array(24).fill(0),
-                    sessionHistory: { lengths: [], timestamps: [] },
-                    avgSessionLength: 0,
-                    longestSession: 0,
-                    sessionLengthVariance: 0,
-                    avgDailyKeys: 0,
-                    dailyVariance: 0,
-                    suspicionScore: 0,
-                    suspicionSignals: []
-                }
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password
             });
+
+            if (error) throw error;
+
+            currentUser = data.user;
+
+            // Initialize cloud passport row
+            const { error: insertError } = await supabase
+                .from('passports')
+                .insert({
+                    user_id: currentUser.id,
+                    email: email,
+                    passport: {
+                        totalKeystrokes: 0,
+                        level: "Novice",
+                        firstUsed: Date.now(),
+                        lastUsed: Date.now(),
+                        sessionsCompleted: 0,
+                        dailyStats: {},
+                        hourlyPattern: new Array(24).fill(0),
+                        sessionHistory: { lengths: [], timestamps: [] },
+                        avgSessionLength: 0,
+                        longestSession: 0,
+                        sessionLengthVariance: 0,
+                        avgDailyKeys: 0,
+                        dailyVariance: 0,
+                        suspicionScore: 0,
+                        suspicionSignals: []
+                    }
+                });
+
+            if (insertError) throw insertError;
 
             return { success: true, user: currentUser };
         } catch (error) {
@@ -107,8 +137,14 @@ const AuthUtils = (() => {
     // Login existing user
     async function login(email, password) {
         try {
-            const userCredential = await auth.signInWithEmailAndPassword(email, password);
-            currentUser = userCredential.user;
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
+
+            if (error) throw error;
+
+            currentUser = data.user;
 
             // Sync passport from cloud
             await syncFromCloud();
@@ -123,7 +159,9 @@ const AuthUtils = (() => {
     // Logout
     async function logout() {
         try {
-            await auth.signOut();
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+
             currentUser = null;
             lastSyncTime = null;
             return { success: true };
@@ -141,31 +179,46 @@ const AuthUtils = (() => {
 
         try {
             // Get cloud passport
-            const docRef = db.collection('passports').doc(currentUser.uid);
-            const doc = await docRef.get();
+            const { data: row, error: fetchError } = await supabase
+                .from('passports')
+                .select('passport')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
 
-            if (!doc.exists) {
-                // First sync - upload local passport
-                await docRef.set({
-                    email: currentUser.email,
-                    lastSynced: firebase.firestore.FieldValue.serverTimestamp(),
-                    passport: localPassport
-                });
+            if (fetchError) throw fetchError;
+
+            if (!row) {
+                // First sync - insert local passport
+                const { error: insertError } = await supabase
+                    .from('passports')
+                    .insert({
+                        user_id: currentUser.id,
+                        email: currentUser.email,
+                        last_synced: new Date().toISOString(),
+                        passport: localPassport
+                    });
+
+                if (insertError) throw insertError;
+
                 lastSyncTime = Date.now();
                 return { success: true, action: 'uploaded', passport: localPassport };
             }
 
-            const cloudData = doc.data();
-            const cloudPassport = cloudData.passport;
+            const cloudPassport = row.passport;
 
             // Merge strategy: Keep passport with MORE keystrokes
             const mergedPassport = mergePassports(localPassport, cloudPassport);
 
             // Upload merged result
-            await docRef.update({
-                lastSynced: firebase.firestore.FieldValue.serverTimestamp(),
-                passport: mergedPassport
-            });
+            const { error: updateError } = await supabase
+                .from('passports')
+                .update({
+                    last_synced: new Date().toISOString(),
+                    passport: mergedPassport
+                })
+                .eq('user_id', currentUser.id);
+
+            if (updateError) throw updateError;
 
             lastSyncTime = Date.now();
 
@@ -188,15 +241,19 @@ const AuthUtils = (() => {
         }
 
         try {
-            const docRef = db.collection('passports').doc(currentUser.uid);
-            const doc = await docRef.get();
+            const { data: row, error: fetchError } = await supabase
+                .from('passports')
+                .select('passport')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
 
-            if (!doc.exists) {
+            if (fetchError) throw fetchError;
+
+            if (!row) {
                 return { success: false, error: 'No cloud passport found' };
             }
 
-            const cloudData = doc.data();
-            const cloudPassport = cloudData.passport;
+            const cloudPassport = row.passport;
 
             // Get local passport
             const result = await new Promise((resolve) => {
@@ -226,10 +283,15 @@ const AuthUtils = (() => {
 
             // Update cloud if merge changed anything
             if (JSON.stringify(mergedPassport) !== JSON.stringify(cloudPassport)) {
-                await docRef.update({
-                    lastSynced: firebase.firestore.FieldValue.serverTimestamp(),
-                    passport: mergedPassport
-                });
+                const { error: updateError } = await supabase
+                    .from('passports')
+                    .update({
+                        last_synced: new Date().toISOString(),
+                        passport: mergedPassport
+                    })
+                    .eq('user_id', currentUser.id);
+
+                if (updateError) throw updateError;
             }
 
             lastSyncTime = Date.now();
@@ -305,7 +367,12 @@ const AuthUtils = (() => {
         }
 
         try {
-            await db.collection('passports').doc(currentUser.uid).delete();
+            const { error } = await supabase
+                .from('passports')
+                .delete()
+                .eq('user_id', currentUser.id);
+
+            if (error) throw error;
             return { success: true };
         } catch (error) {
             console.error('Delete cloud data error:', error);
@@ -416,7 +483,7 @@ const AuthUtils = (() => {
 
         if (result.success) {
             hideLoginModal();
-            showNotification('✅ Logged in successfully!');
+            showNotification('Logged in successfully!');
         } else {
             errorEl.innerText = result.error;
             errorEl.style.color = '#FF0055';
@@ -436,7 +503,7 @@ const AuthUtils = (() => {
     // Handle manual sync
     async function handleManualSync() {
         if (!currentUser) {
-            showNotification('⚠️ Login required to sync');
+            showNotification('Login required to sync');
             return;
         }
 
@@ -446,7 +513,7 @@ const AuthUtils = (() => {
         chrome.storage.local.get(['passport'], async (data) => {
             const localPassport = data.passport;
             if (!localPassport) {
-                showNotification('⚠️ No local passport to sync');
+                showNotification('No local passport to sync');
                 return;
             }
 
@@ -454,16 +521,16 @@ const AuthUtils = (() => {
 
             if (result.success) {
                 if (result.wasMerged) {
-                    showNotification('✅ Synced & merged with cloud');
+                    showNotification('Synced & merged with cloud');
                     // Update UI with merged passport
                     chrome.storage.local.set({ passport: result.passport });
                     if (typeof updateDashboard === 'function') updateDashboard();
                 } else {
-                    showNotification('✅ Synced to cloud');
+                    showNotification('Synced to cloud');
                 }
                 updateAuthUI();
             } else {
-                showNotification('❌ Sync failed: ' + result.error);
+                showNotification('Sync failed: ' + result.error);
             }
         });
     }
