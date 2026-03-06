@@ -375,6 +375,49 @@
                         </div>
                         ${cryptoBanner}
 
+                        ${data.war != null ? `
+                        <div class="metric-grid">
+                            <div class="metric">
+                                <div class="metric-label">WAR Score</div>
+                                <div class="metric-value" style="color: ${data.war >= 0.60 ? '#00F0FF' : data.war >= 0.40 ? '#FFD700' : '#FF0055'}">
+                                    ${data.war}
+                                </div>
+                                <div class="metric-status" style="color: ${data.war >= 0.60 ? '#00F0FF' : data.war >= 0.40 ? '#FFD700' : '#FF0055'}">
+                                    ${data.war_tier || 'Unknown'}${data.raw_war != null && data.raw_war !== data.war ? ' (capped from ' + data.raw_war + ')' : ''}
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Time Cap</div>
+                                <div class="metric-value" style="color: ${(data.time_cap || 0) >= 0.80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.time_cap != null ? Math.round(data.time_cap * 100) + '%' : '—'}
+                                </div>
+                                <div class="metric-status" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
+                                    ${(data.accountAge || 0)} day${data.accountAge !== 1 ? 's' : ''} old
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Total Keystrokes</div>
+                                <div class="metric-value" style="color: #FFD700">
+                                    ${formatNumber(data.passport || 0)}
+                                </div>
+                                <div class="metric-status" style="color: #FFD700">
+                                    ${data.passportLevel || 'Unknown'}
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Session Integrity</div>
+                                <div class="metric-value" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity}%
+                                </div>
+                                <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity >= 80 ? 'Clean' : 'Review'}
+                                </div>
+                            </div>
+                        </div>
+                        ` : `
                         <div class="metric-grid">
                             <div class="metric">
                                 <div class="metric-label">Session Integrity</div>
@@ -382,7 +425,7 @@
                                     ${data.integrity}%
                                 </div>
                                 <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.integrity >= 80 ? '✅ Clean' : '⚠️ Review'}
+                                    ${data.integrity >= 80 ? 'Clean' : 'Review'}
                                 </div>
                             </div>
 
@@ -392,7 +435,7 @@
                                     ${data.cr}
                                 </div>
                                 <div class="metric-status" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.cr >= 1.5 ? '✅ Human-like' : '⚠️ Low variance'}
+                                    ${data.cr >= 1.5 ? 'Human-like' : 'Low variance'}
                                 </div>
                             </div>
 
@@ -412,10 +455,11 @@
                                     ${data.accountAge || 0}
                                 </div>
                                 <div class="metric-status" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
-                                    ${(data.accountAge || 0) >= 30 ? '✅ Established' : '⚠️ New account'}
+                                    ${(data.accountAge || 0) >= 30 ? 'Established' : 'New account'}
                                 </div>
                             </div>
                         </div>
+                        `}
 
                         <div class="section-header">SESSION DETAILS</div>
                         <div class="info-row">

@@ -187,23 +187,22 @@ function updateUI() {
             ${project.isActive ? (() => {
                 const loki = JitterBio.analyzeLoki(bioSession);
                 const profile = JitterBio.getProfile(bioSession);
+                const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+                const warDisplay = warResult ? warResult.raw_war : '—';
+                const tierDisplay = warResult ? warResult.tier : '—';
+                const warColor = warResult && warResult.raw_war >= 0.60 ? '#00F0FF' : warResult && warResult.raw_war >= 0.40 ? '#FFD700' : '#FF0055';
                 return `
-                <div class="jitter-section-title">LOKI BIOMETRICS</div>
+                <div class="jitter-section-title">WAR SCORE</div>
+                <div class="jitter-row"><span>WAR</span><span class="jitter-val" style="color:${warColor};font-size:16px">${warDisplay}</span></div>
+                <div class="jitter-row"><span>Tier</span><span class="jitter-val" style="color:${warColor}">${tierDisplay}</span></div>
+                <div style="width:100%; background:#222; height:4px; border-radius:2px; overflow:hidden; margin-bottom:10px;">
+                    <div style="width:${warResult ? warResult.raw_war * 100 : 0}%; background:${warColor}; height:100%;"></div>
+                </div>
+                <div class="jitter-section-title">SIGNALS</div>
                 <div class="jitter-row"><span>Entropy</span><span class="jitter-val">${loki.entropy}</span></div>
                 <div class="jitter-row"><span>Cog. Ratio</span><span class="jitter-val" style="color:${loki.cognitiveRatio < 1.5 ? '#FFD700' : '#00F0FF'}">${loki.cognitiveRatio.toFixed(2)}</span></div>
                 <div class="jitter-row"><span>Edits</span><span class="jitter-val">${bioSession.backspaceCount}</span></div>
-                <div class="jitter-row"><span>Dwell</span><span class="jitter-val">${profile?.mean_dwell ? profile.mean_dwell + 'ms' : '—'}</span></div>
-                <div class="jitter-row"><span>Bursts</span><span class="jitter-val">${profile?.burst_count || 0}</span></div>
-
-                <div class="jitter-meter-container" style="margin-top:10px; margin-bottom:5px;">
-                    <div class="jitter-row" style="margin-bottom:2px;">
-                        <span>Integrity</span>
-                        <span class="jitter-val" style="color:${statusColor}">${statusText}</span>
-                    </div>
-                    <div style="width:100%; background:#222; height:4px; border-radius:2px; overflow:hidden;">
-                        <div style="width:${stats.integrity}%; background:${statusColor}; height:100%;"></div>
-                    </div>
-                </div>
+                <div class="jitter-row"><span>Integrity</span><span class="jitter-val" style="color:${statusColor}">${statusText}</span></div>
                 <div class="jitter-btn primary" id="btn-copy">MINT BADGE</div>
                 <div class="jitter-btn" id="btn-stop">STOP & COMMIT</div>
             `;
@@ -235,7 +234,7 @@ function setupUI(){if(document.getElementById('jitter-shield'))return;const s=do
 document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
 function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clearTimeout(scannerTimer);scannerTimer=setTimeout(scanLinks,500)}).observe(document.body,{childList:true,subtree:true})}
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
-function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div><div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;document.body.appendChild(h)}catch(e){}}
+function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;const warLine=d.war!=null?`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">WAR: ${d.war} (${d.war_tier||'—'})</div>`:`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${warLine}`;document.body.appendChild(h)}catch(e){}}
 function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
 function showCertificate(b) {
     try {
@@ -317,11 +316,23 @@ async function copyBadge(s, a) {
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
     }
 
+    // WAR score
+    const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
+
     const p = {
-        version: '2.1',
+        version: '3.0',
         type: 'content',
         title: 'Verified',
         timestamp: Date.now(),
+        // WAR (v3.0)
+        war: cappedWar ? cappedWar.war : null,
+        raw_war: cappedWar ? cappedWar.raw_war : null,
+        war_tier: cappedWar ? cappedWar.tier : null,
+        time_cap: cappedWar ? cappedWar.timeCap : null,
+        war_components: cappedWar ? cappedWar.components : null,
+        war_flags: cappedWar ? cappedWar.flags : null,
+        // Legacy (kept for backward compat)
         integrity: integrity,
         keys: s.typed,
         pastedChars: pastedChars,
@@ -330,7 +341,7 @@ async function copyBadge(s, a) {
         edits: bioSession.backspaceCount,
         cr: loki.cognitiveRatio.toFixed(2),
         entropy: loki.entropy,
-        // Biometric profile (v2.1)
+        // Biometric profile
         meanDwell: profile?.mean_dwell,
         stdDwell: profile?.std_dwell,
         meanFlight: profile?.mean_inter_key,

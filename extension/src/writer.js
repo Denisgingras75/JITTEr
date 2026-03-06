@@ -328,20 +328,31 @@ async function exportBadge() {
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
     }
 
-    // Payload includes Cognitive Ratio (CR) + Passport Data + Crypto
+    // WAR score
+    const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
+
     const payload = {
-        version: '2.1',
+        version: '3.0',
         type: 'project',
         title: 'Jitter Doc',
         timestamp: Date.now(),
+        // WAR (v3.0)
+        war: cappedWar ? cappedWar.war : null,
+        raw_war: cappedWar ? cappedWar.raw_war : null,
+        war_tier: cappedWar ? cappedWar.tier : null,
+        time_cap: cappedWar ? cappedWar.timeCap : null,
+        war_components: cappedWar ? cappedWar.components : null,
+        war_flags: cappedWar ? cappedWar.flags : null,
+        // Legacy
         purity: purity,
         integrity: integrity,
         keys: session.humanChars,
         edits: bioSession.backspaceCount,
-        cr: loki.cognitiveRatio.toFixed(2), // The Loki Metric
+        cr: loki.cognitiveRatio.toFixed(2),
         entropy: loki.entropy,
         date: date,
-        // Biometric profile (v2.1)
+        // Biometric profile
         meanDwell: profile?.mean_dwell,
         stdDwell: profile?.std_dwell,
         meanFlight: profile?.mean_inter_key,
