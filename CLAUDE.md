@@ -9,17 +9,16 @@ Behavioral biometrics widget that proves a human typed something. Not AI detecti
 
 **Patents:** #63/994,858 (base, 2026-03-02) + #63/997,498 (CIP, 2026-03-05)
 
-## Read MASTER-PLAN.md for:
-- Full widget spec (jitter-widget.js build target)
-- WAR formula with signal weights
-- Time confidence cap table
-- Paste weighting rules
-- Passport card layout
-- Integration API (script tag, config, React)
-- Badge v3.0 JSON spec
-- Priority order + "what done looks like" checklist
+## Read JITTER-PLAN.md for:
+- The Five Components (widget, passport, essay, hall effect, extension)
+- WAR formula with signal weights + time confidence caps
+- Widget spec (jitter-widget.js build target) + done criteria
+- Paste weighting rules + passport storage spec
+- Hall Effect / Wooting research plan
+- Known gaps table + priority order
+- Exit thesis + key people
 
-**Read it when building the widget or touching the engine. Skip it for small fixes.**
+**Read it when building anything. Skip it for small fixes.**
 
 ## Repo Structure
 ```
@@ -61,7 +60,7 @@ archive/          All previous versions (proof of work)
 - Three badge formats exist — unify to v3.0 spec (see MASTER-PLAN.md)
 
 ## Key Files
-1. `MASTER-PLAN.md` — full build bible (widget spec, WAR formula, API)
+1. `JITTER-PLAN.md` — full build bible (5 components, WAR formula, exit thesis)
 2. `JITTER_FOUNDATIONS.md` — 610-line product bible
 3. `lab/jitter-box.js` — the real engine
 4. `extension/src/content.js` — Chrome content script, protocol v10.0
