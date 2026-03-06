@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jitter Badge Verification | Teacher Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            color: #ddd;
+            font-family: 'Inter', system-ui, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin: 0;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .header p {
+            color: #888;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+
+        .input-section {
+            background: #0f0f0f;
+            border: 2px solid #222;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .input-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #badge-input {
+            width: 100%;
+            min-height: 120px;
+            background: #050505;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #ddd;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 15px;
+            resize: vertical;
+        }
+
+        #badge-input:focus {
+            outline: none;
+            border-color: #00F0FF;
+            box-shadow: 0 0 20px #00F0FF33;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: #00F0FF11;
+            border: 2px solid #00F0FF;
+            color: #00F0FF;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.2s;
+            margin-top: 15px;
+        }
+
+        .btn:hover {
+            background: #00F0FF22;
+            box-shadow: 0 0 25px #00F0FF44;
+            transform: translateY(-2px);
+        }
+
+        #result {
+            display: none;
+        }
+
+        .result-card {
+            background: #0f0f0f;
+            border: 2px solid #222;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #222;
+        }
+
+        .risk-badge {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .risk-low { background: #00F0FF22; color: #00F0FF; border: 2px solid #00F0FF; }
+        .risk-medium { background: #FFD70022; color: #FFD700; border: 2px solid #FFD700; }
+        .risk-high { background: #FF005522; color: #FF0055; border: 2px solid #FF0055; }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .metric {
+            background: #111;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #222;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metric-status {
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .section-header {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 30px 0 15px 0;
+            font-weight: bold;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #222;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #888;
+        }
+
+        .info-value {
+            font-weight: bold;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .alert-box {
+            background: #FF005511;
+            border: 2px solid #FF0055;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .alert-title {
+            font-weight: bold;
+            color: #FF0055;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .alert-item {
+            color: #ddd;
+            font-size: 13px;
+            margin: 5px 0;
+            padding-left: 15px;
+            position: relative;
+        }
+
+        .alert-item:before {
+            content: '⚠';
+            position: absolute;
+            left: 0;
+        }
+
+        .success-box {
+            background: #00F0FF11;
+            border: 2px solid #00F0FF;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #00F0FF;
+        }
+
+        .chain-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #111;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .chain-icon {
+            font-size: 24px;
+        }
+
+        .error-box {
+            background: #FF005511;
+            border: 2px solid #FF0055;
+            border-radius: 6px;
+            padding: 20px;
+            color: #FF0055;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span>⚡</span>
+                <span>JITTER VERIFICATION</span>
+            </h1>
+            <p>Teacher Dashboard - Verify Student Badges</p>
+        </div>
+
+        <div class="input-section">
+            <div class="input-label">Paste Badge Link or Code</div>
+            <textarea id="badge-input" placeholder="Paste the ⚡ JITTER badge HTML, URL (#jitter:...), or Base64 code here..."></textarea>
+            <button class="btn" onclick="verifyBadge()">VERIFY BADGE</button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script src="crypto-utils.js"></script>
+    <script src="passport-utils.js"></script>
+    <script>
+        function extractBadgeData(input) {
+            input = input.trim();
+
+            // Try to extract from HTML
+            const htmlMatch = input.match(/data-jitter-payload="([^"]+)"/);
+            if (htmlMatch) return htmlMatch[1];
+
+            // Try to extract from URL
+            const urlMatch = input.match(/#jitter:([A-Za-z0-9+/=]+)/);
+            if (urlMatch) return urlMatch[1];
+
+            // Assume it's raw base64
+            return input;
+        }
+
+        function getRiskClass(score) {
+            if (score >= 70) return 'risk-high';
+            if (score >= 40) return 'risk-medium';
+            return 'risk-low';
+        }
+
+        function getRiskEmoji(score) {
+            if (score >= 70) return '🚨';
+            if (score >= 40) return '⚠️';
+            return '✅';
+        }
+
+        function getRiskText(score) {
+            if (score >= 70) return 'HIGH RISK';
+            if (score >= 40) return 'MEDIUM RISK';
+            return 'LOW RISK';
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        async function verifyBadge() {
+            const input = document.getElementById('badge-input').value;
+            const resultDiv = document.getElementById('result');
+
+            if (!input) {
+                resultDiv.innerHTML = '<div class="error-box">Please paste a badge first.</div>';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const base64 = extractBadgeData(input);
+                const jsonString = atob(base64);
+                const data = JSON.parse(jsonString);
+
+                // --- CRYPTOGRAPHIC VERIFICATION ---
+                // The signature was computed over the payload WITHOUT the signature field.
+                // Strip signature to reconstruct what was originally signed.
+                let cryptoStatus = 'unsigned'; // 'unsigned' | 'valid' | 'invalid'
+                if (data.signature && data.publicKeyJwk) {
+                    const { signature, ...payloadWithoutSignature } = data;
+                    try {
+                        const isValid = await CryptoUtils.verifyBadge(
+                            payloadWithoutSignature,
+                            signature,
+                            data.publicKeyJwk
+                        );
+                        cryptoStatus = isValid ? 'valid' : 'invalid';
+                    } catch (e) {
+                        cryptoStatus = 'invalid';
+                    }
+                }
+
+                const suspicionScore = data.suspicionScore || 0;
+                const riskClass = getRiskClass(suspicionScore);
+                const riskEmoji = getRiskEmoji(suspicionScore);
+                const riskText = getRiskText(suspicionScore);
+
+                // Build crypto status banner
+                const cryptoBanner = cryptoStatus === 'valid'
+                    ? `<div style="background:#00F0FF11;border:2px solid #00F0FF;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🔐</span><div><div style="font-weight:bold;color:#00F0FF;">SIGNATURE VALID — Cryptographically Verified</div><div style="font-size:12px;color:#888;margin-top:2px;">ECDSA P-256 · Key ID: ${data.publicKeyId || '—'}</div></div></div>`
+                    : cryptoStatus === 'invalid'
+                    ? `<div style="background:#FF005511;border:2px solid #FF0055;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🚨</span><div><div style="font-weight:bold;color:#FF0055;">SIGNATURE INVALID — Badge may be forged</div><div style="font-size:12px;color:#888;margin-top:2px;">The cryptographic signature does not match the payload.</div></div></div>`
+                    : `<div style="background:#FFD70011;border:2px solid #FFD700;border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">⚠️</span><div><div style="font-weight:bold;color:#FFD700;">UNSIGNED BADGE — No cryptographic proof</div><div style="font-size:12px;color:#888;margin-top:2px;">Data is readable but authenticity cannot be confirmed.</div></div></div>`;
+
+                const headerTitle = cryptoStatus === 'valid' ? 'Badge Verified ✅' : cryptoStatus === 'invalid' ? 'Badge Invalid ❌' : 'Badge Decoded (Unsigned)';
+
+                let html = `
+                    <div class="result-card">
+                        <div class="result-header">
+                            <h2 style="margin:0; color:#fff;">${headerTitle}</h2>
+                            <div class="risk-badge ${riskClass}">
+                                ${riskEmoji} ${riskText} (${suspicionScore}/100)
+                            </div>
+                        </div>
+                        ${cryptoBanner}
+
+                        <div class="metric-grid">
+                            <div class="metric">
+                                <div class="metric-label">Session Integrity</div>
+                                <div class="metric-value" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity}%
+                                </div>
+                                <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.integrity >= 80 ? '✅ Clean' : '⚠️ Review'}
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Cognitive Ratio</div>
+                                <div class="metric-value" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.cr}
+                                </div>
+                                <div class="metric-status" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.cr >= 1.5 ? '✅ Human-like' : '⚠️ Low variance'}
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Total Keystrokes</div>
+                                <div class="metric-value" style="color: #FFD700">
+                                    ${formatNumber(data.passport || 0)}
+                                </div>
+                                <div class="metric-status" style="color: #FFD700">
+                                    ${data.passportLevel || 'Unknown'}
+                                </div>
+                            </div>
+
+                            <div class="metric">
+                                <div class="metric-label">Account Age</div>
+                                <div class="metric-value" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
+                                    ${data.accountAge || 0}
+                                </div>
+                                <div class="metric-status" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
+                                    ${(data.accountAge || 0) >= 30 ? '✅ Established' : '⚠️ New account'}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-header">SESSION DETAILS</div>
+                        <div class="info-row">
+                            <span class="info-label">Date Submitted</span>
+                            <span class="info-value">${data.date || 'Unknown'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Session Keys</span>
+                            <span class="info-value">${formatNumber(data.keys || 0)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Human Edits</span>
+                            <span class="info-value">${data.edits || 0}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Entropy Score</span>
+                            <span class="info-value">${data.entropy || 0}/100</span>
+                        </div>
+
+                        <div class="section-header">BIOMETRIC PROFILE</div>
+                        <div class="info-row">
+                            <span class="info-label">Dwell Time</span>
+                            <span class="info-value">${data.meanDwell != null ? data.meanDwell + 'ms (\u00b1' + (data.stdDwell || 0) + ')' : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Flight Time</span>
+                            <span class="info-value">${data.meanFlight != null ? data.meanFlight + 'ms (\u00b1' + (data.stdFlight || 0) + ')' : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">DD Time</span>
+                            <span class="info-value">${data.meanDd != null ? data.meanDd + 'ms (\u00b1' + (data.stdDd || 0) + ')' : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Edit Ratio</span>
+                            <span class="info-value">${data.editRatio != null ? (data.editRatio * 100).toFixed(1) + '%' : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Pause Frequency</span>
+                            <span class="info-value">${data.pauseFreq != null ? data.pauseFreq + '/100 keys' : '\u2014'}</span>
+                        </div>
+
+                        <div class="section-header">COMPOSITION ANALYSIS</div>
+                        <div class="info-row">
+                            <span class="info-label">Burst Count</span>
+                            <span class="info-value">${data.burstCount != null ? data.burstCount : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Avg Burst Length</span>
+                            <span class="info-value">${data.avgBurstLength != null ? data.avgBurstLength + ' keys' : '\u2014'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Burst Variance</span>
+                            <span class="info-value" style="color: ${data.burstVariance != null && data.burstVariance < 0.15 ? '#FFD700' : '#fff'}">${data.burstVariance != null ? data.burstVariance : '\u2014'}</span>
+                        </div>
+`;
+
+                // Cursor tracking (writer mode only)
+                if (data.editingLinearity != null) {
+                    const linearityPct = (data.editingLinearity * 100).toFixed(0);
+                    const linearityColor = data.editingLinearity > 0.95 ? '#FFD700' : '#00F0FF';
+                    html += `
+                        <div class="info-row">
+                            <span class="info-label">Editing Linearity</span>
+                            <span class="info-value" style="color: ${linearityColor}">${linearityPct}%</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Cursor Jumps</span>
+                            <span class="info-value">${data.cursorJumps || 0}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Backward Edits</span>
+                            <span class="info-value">${data.backwardEdits || 0}</span>
+                        </div>
+                    `;
+                }
+
+                // Fatigue trend
+                if (data.fatigueWindows && data.fatigueWindows.length > 1) {
+                    const first = data.fatigueWindows[0];
+                    const last = data.fatigueWindows[data.fatigueWindows.length - 1];
+                    const trend = last > first ? '\u2197 slowing' : '\u2198 speeding up';
+                    const trendColor = last > first ? '#FFD700' : '#00F0FF';
+                    html += `
+                        <div class="info-row">
+                            <span class="info-label">Fatigue Trend</span>
+                            <span class="info-value" style="color: ${trendColor}">${data.fatigueWindows.join(' \u2192 ')} <span style="font-size:12px">(${trend})</span></span>
+                        </div>
+                    `;
+                }
+
+                html += `
+                        <div class="section-header">PASSPORT PROFILE</div>
+                        <div class="info-row">
+                            <span class="info-label">Lifetime Keystrokes</span>
+                            <span class="info-value">${formatNumber(data.passport || 0)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Level</span>
+                            <span class="info-value">${data.passportLevel || 'Unknown'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Sessions Completed</span>
+                            <span class="info-value">${data.sessions || 0}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Avg Daily Output</span>
+                            <span class="info-value">${formatNumber(data.avgDailyKeys || 0)} keys/day</span>
+                        </div>
+`;
+
+                // Show chain link if present
+                if (data.previousBadge) {
+                    html += `
+                        <div class="section-header">BADGE CHAIN</div>
+                        <div class="chain-indicator">
+                            <span class="chain-icon">⛓️</span>
+                            <div>
+                                <div style="font-weight:bold; color:#00F0FF;">Linked to Previous Badge</div>
+                                <div style="font-size:12px; color:#888; margin-top:3px;">
+                                    Previous hash: ${data.previousBadge}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Transcription warning
+                if (data.transcriptionFlag) {
+                    html += `
+                        <div class="alert-box" style="background: #FFD70011; border-color: #FFD700;">
+                            <div class="alert-title" style="color: #FFD700;">\u26a0\ufe0f TRANSCRIPTION PATTERN DETECTED</div>
+                            <div style="color: #ddd; font-size: 13px;">
+                                Writing pattern suggests transcription (pure forward typing, low burst variance).
+                                This is not a bot detection \u2014 it indicates the content may have been typed from another source.
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Show warnings if high risk
+                if (suspicionScore >= 40) {
+                    html += `
+                        <div class="alert-box">
+                            <div class="alert-title">⚠️ SUSPICIOUS PATTERNS DETECTED</div>
+                            ${data.avgDailyKeys > 3000 ? '<div class="alert-item">High daily output (' + formatNumber(data.avgDailyKeys) + ' keys/day)</div>' : ''}
+                            ${data.accountAge < 7 && data.passport > 5000 ? '<div class="alert-item">New account with suspiciously high output</div>' : ''}
+                            ${data.cr < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
+                            ${data.integrity < 80 ? '<div class="alert-item">High paste percentage</div>' : ''}
+                            ${data.burstVariance != null && data.burstVariance < 0.15 && data.burstCount > 5 ? '<div class="alert-item">Unnaturally consistent burst pattern</div>' : ''}
+                            ${data.editingLinearity != null && data.editingLinearity > 0.95 && data.keys > 500 ? '<div class="alert-item">Pure forward typing (possible transcription)</div>' : ''}
+                            <div style="margin-top:10px; font-size:12px; color:#ddd;">
+                                Recommendation: Review this submission manually
+                            </div>
+                        </div>
+                    `;
+                } else if (suspicionScore < 20 && cryptoStatus === 'valid') {
+                    html += `
+                        <div class="success-box">
+                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.
+                        </div>
+                    `;
+                } else if (suspicionScore < 20 && cryptoStatus === 'unsigned') {
+                    html += `
+                        <div class="success-box" style="background:#FFD70011;border-color:#FFD700;color:#FFD700;">
+                            ⚠️ Metrics look human, but no cryptographic proof. Ask student to re-submit using Jitter v2.0.
+                        </div>
+                    `;
+                }
+
+                html += `</div>`;
+
+                resultDiv.innerHTML = html;
+                resultDiv.style.display = 'block';
+
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error-box">
+                        <h3 style="margin-top:0;">❌ Invalid Badge</h3>
+                        <p>Could not decode badge data. Please check the input and try again.</p>
+                        <p style="font-size:12px; margin-top:10px; color:#888;">Error: ${error.message}</p>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        // Allow Enter key to verify
+        document.getElementById('badge-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                verifyBadge();
+            }
+        });
+    </script>
+</body>
+</html>

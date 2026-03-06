@@ -1,0 +1,2966 @@
+{
+  "thresholds": {
+    "iki": {
+      "min_ms": 54,
+      "fast_human_mean": 110,
+      "avg_human_mean": 215,
+      "slow_human_mean": 433,
+      "max_reasonable": 660,
+      "min_std": 9,
+      "fast_human_std": 11,
+      "avg_human_std": 100,
+      "slow_human_std": 111
+    },
+    "dwell": {
+      "min_ms": 27,
+      "avg_desktop": 105,
+      "avg_mobile": 72,
+      "max_ms": 495
+    },
+    "cv": {
+      "min_human": 0.09,
+      "avg_human": 0.27,
+      "max_human": 0.54
+    },
+    "entropy": {
+      "min_human": 2.25,
+      "avg_human": 2.7
+    },
+    "dwell_uniformity": {
+      "min_human_cv": 0.09
+    },
+    "activity": {
+      "max_reviews_per_day": 11,
+      "max_reviews_per_hour": 4,
+      "max_reviews_per_month": 66
+    },
+    "circadian": {
+      "night_slowdown_pct": 0.135,
+      "night_start_hour": 22,
+      "night_end_hour": 6,
+      "peak_speedup_pct": 0.045,
+      "peak_start_hour": 14,
+      "peak_end_hour": 18
+    }
+  },
+  "profileOverview": {
+    "fast_desktop": {
+      "count": 8,
+      "platform": "desktop",
+      "ikiRange": "110-165ms",
+      "stdRange": "9-20ms",
+      "dwellRange": "68-105ms",
+      "reviewsPerDay": "0.3-2"
+    },
+    "avg_desktop": {
+      "count": 16,
+      "platform": "desktop",
+      "ikiRange": "165-330ms",
+      "stdRange": "25-80ms",
+      "dwellRange": "85-140ms",
+      "reviewsPerDay": "0.1-1"
+    },
+    "slow_desktop": {
+      "count": 6,
+      "platform": "desktop",
+      "ikiRange": "330-500ms",
+      "stdRange": "55-120ms",
+      "dwellRange": "110-180ms",
+      "reviewsPerDay": "0.05-0.5"
+    },
+    "mobile_thumb": {
+      "count": 12,
+      "platform": "mobile",
+      "ikiRange": "170-350ms",
+      "stdRange": "35-95ms",
+      "dwellRange": "50-110ms",
+      "reviewsPerDay": "0.2-1.5"
+    },
+    "mobile_finger": {
+      "count": 4,
+      "platform": "mobile",
+      "ikiRange": "280-500ms",
+      "stdRange": "60-130ms",
+      "dwellRange": "45-95ms",
+      "reviewsPerDay": "0.05-0.3"
+    },
+    "power_reviewer": {
+      "count": 4,
+      "platform": "desktop",
+      "ikiRange": "120-200ms",
+      "stdRange": "12-35ms",
+      "dwellRange": "70-115ms",
+      "reviewsPerDay": "1-3"
+    }
+  },
+  "convergenceOverTime": {
+    "profiles": [
+      {
+        "profileId": "fast_desktop-0",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 15,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 22
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 53
+        },
+        "finalConsistency": 0.876,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-1",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 34,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 5
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 21
+        },
+        "finalConsistency": 0.885,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-2",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 51,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 6
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 17
+        },
+        "finalConsistency": 0.882,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-3",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 59,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 4
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 14
+        },
+        "finalConsistency": 0.909,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-4",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 84,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 2
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 11
+        },
+        "finalConsistency": 0.905,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-5",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 71,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 4
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 10
+        },
+        "finalConsistency": 0.893,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-6",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 92,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 2
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 7
+        },
+        "finalConsistency": 0.888,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-7",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 99,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 4
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 10
+        },
+        "finalConsistency": 0.905,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-0",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 7,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 37
+        },
+        "reachedHigh": null,
+        "finalConsistency": 0.915,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-1",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 10,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 18
+        },
+        "reachedHigh": null,
+        "finalConsistency": 0.828,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-2",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 20,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 17
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 51
+        },
+        "finalConsistency": 0.888,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-3",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 13,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 22
+        },
+        "reachedHigh": null,
+        "finalConsistency": 0.916,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-4",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 16,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 22
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 51
+        },
+        "finalConsistency": 0.892,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-5",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 24,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 9
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 26
+        },
+        "finalConsistency": 0.886,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-6",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 34,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 6
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 24
+        },
+        "finalConsistency": 0.906,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-7",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 30,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 11
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 32
+        },
+        "finalConsistency": 0.884,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-8",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 27,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 10
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 28
+        },
+        "finalConsistency": 0.907,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-9",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 39,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 7
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 19
+        },
+        "finalConsistency": 0.889,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-10",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 33,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 6
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 21
+        },
+        "finalConsistency": 0.899,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-11",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 52,
+        "totalDays": 60,
+        "reachedMedium": {
+          "session": 5,
+          "day": 5
+        },
+        "reachedHigh": {
+          "session": 15,
+          "day": 14
+        },
+        "finalConsistency": 0.901,
+        "finalConfidence": "high"
+      }
+    ],
+    "summary": {
+      "totalProfiles": 20,
+      "reachedHighCount": 17,
+      "reachedHighRate": "85.0%",
+      "avgDaysToHigh": 24.06,
+      "avgSessionsToHigh": 15,
+      "avgDaysToMedium": 10.95,
+      "avgFinalConsistency": 0.893
+    }
+  },
+  "circadianEffect": {
+    "profiles": [
+      {
+        "profileId": "fast_desktop-0",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-1",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.847,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-2",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-3",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.572,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-4",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.847,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-5",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-6",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.523,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "fast_desktop-7",
+        "type": "fast_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "avg_desktop-0",
+        "type": "avg_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      },
+      {
+        "profileId": "avg_desktop-1",
+        "type": "avg_desktop",
+        "baselineConsistency": 0.846,
+        "hourlyConsistency": {
+          "0:00": {
+            "avgConsistency": 0.764,
+            "minConsistency": 0.596,
+            "wouldLoseBadge": 0
+          },
+          "2:00": {
+            "avgConsistency": 0.78,
+            "minConsistency": 0.573,
+            "wouldLoseBadge": 0
+          },
+          "4:00": {
+            "avgConsistency": 0.758,
+            "minConsistency": 0.478,
+            "wouldLoseBadge": 0
+          },
+          "6:00": {
+            "avgConsistency": 0.883,
+            "minConsistency": 0.639,
+            "wouldLoseBadge": 0
+          },
+          "8:00": {
+            "avgConsistency": 0.841,
+            "minConsistency": 0.654,
+            "wouldLoseBadge": 0
+          },
+          "10:00": {
+            "avgConsistency": 0.862,
+            "minConsistency": 0.71,
+            "wouldLoseBadge": 0
+          },
+          "12:00": {
+            "avgConsistency": 0.898,
+            "minConsistency": 0.743,
+            "wouldLoseBadge": 0
+          },
+          "14:00": {
+            "avgConsistency": 0.876,
+            "minConsistency": 0.721,
+            "wouldLoseBadge": 0
+          },
+          "16:00": {
+            "avgConsistency": 0.912,
+            "minConsistency": 0.745,
+            "wouldLoseBadge": 0
+          },
+          "18:00": {
+            "avgConsistency": 0.865,
+            "minConsistency": 0.678,
+            "wouldLoseBadge": 0
+          },
+          "20:00": {
+            "avgConsistency": 0.849,
+            "minConsistency": 0.666,
+            "wouldLoseBadge": 0
+          },
+          "22:00": {
+            "avgConsistency": 0.717,
+            "minConsistency": 0.524,
+            "wouldLoseBadge": 0
+          }
+        }
+      }
+    ],
+    "summary": {
+      "nightBadgeLossRate": "0.0%",
+      "dayBadgeLossRate": "0.0%",
+      "verdict": "OK: Night drift stays within tolerance"
+    }
+  },
+  "platformComparison": {
+    "desktop": {
+      "platform": "desktop",
+      "count": 34,
+      "avgConsistency": 0.857,
+      "avgIKI": 240.88,
+      "avgDwell": 109.76
+    },
+    "mobile": {
+      "platform": "mobile",
+      "count": 16,
+      "avgConsistency": 0.857,
+      "avgIKI": 292.5,
+      "avgDwell": 77.5
+    },
+    "crossPlatformFalseMatchRate": "56.0%"
+  },
+  "powerReviewerStress": {
+    "profiles": [
+      {
+        "profileId": "power_reviewer-0",
+        "totalSessions": 29,
+        "totalDays": 30,
+        "avgPerDay": 0.97,
+        "maxPerDay": 3,
+        "velocityFlagged": 0,
+        "finalConsistency": 0.881,
+        "finalConfidence": "high",
+        "consistencyStability": 0.003
+      },
+      {
+        "profileId": "power_reviewer-1",
+        "totalSessions": 48,
+        "totalDays": 30,
+        "avgPerDay": 1.6,
+        "maxPerDay": 7,
+        "velocityFlagged": 0,
+        "finalConsistency": 0.887,
+        "finalConfidence": "high",
+        "consistencyStability": 0.001
+      },
+      {
+        "profileId": "power_reviewer-2",
+        "totalSessions": 82,
+        "totalDays": 30,
+        "avgPerDay": 2.73,
+        "maxPerDay": 6,
+        "velocityFlagged": 0,
+        "finalConsistency": 0.898,
+        "finalConfidence": "high",
+        "consistencyStability": 0.001
+      },
+      {
+        "profileId": "power_reviewer-3",
+        "totalSessions": 82,
+        "totalDays": 30,
+        "avgPerDay": 2.73,
+        "maxPerDay": 7,
+        "velocityFlagged": 0,
+        "finalConsistency": 0.895,
+        "finalConfidence": "high",
+        "consistencyStability": 0.001
+      }
+    ],
+    "summary": {
+      "avgSessionsPerDay": 2.01,
+      "maxSingleDay": 7,
+      "velocityFlaggedTotal": 0,
+      "verdict": "OK: No power reviewers hit velocity limits"
+    }
+  },
+  "velocityAnomalies": {
+    "human": {
+      "totalSessions": 5,
+      "days": 30,
+      "avgPerDay": 0.17,
+      "finalConsistency": 0.814,
+      "finalConfidence": "medium"
+    },
+    "bot": {
+      "totalSessions": 20,
+      "days": 1,
+      "avgPerDay": 20,
+      "finalConsistency": 0.951,
+      "finalConfidence": "high",
+      "flaggedByVelocity": true
+    },
+    "verdict": "CRITICAL: Bot with 20 reviews/day builds high consistency — velocity check is only defense"
+  },
+  "botDetectionWithThresholds": {
+    "zero_delay": {
+      "total": 30,
+      "detectedByMean": "100.0%",
+      "detectedByDwell": "100.0%",
+      "detectedByDwellUniformity": "100.0%",
+      "detectedByAnyNewCheck": "100.0%"
+    },
+    "fixed_delay": {
+      "total": 30,
+      "detectedByMean": "10.0%",
+      "detectedByDwell": "100.0%",
+      "detectedByDwellUniformity": "100.0%",
+      "detectedByAnyNewCheck": "100.0%"
+    },
+    "uniform_random": {
+      "total": 30,
+      "detectedByMean": "0.0%",
+      "detectedByDwell": "100.0%",
+      "detectedByDwellUniformity": "0.0%",
+      "detectedByAnyNewCheck": "100.0%"
+    },
+    "gaussian_mimic": {
+      "total": 30,
+      "detectedByMean": "0.0%",
+      "detectedByDwell": "100.0%",
+      "detectedByDwellUniformity": "100.0%",
+      "detectedByAnyNewCheck": "100.0%"
+    },
+    "replay": {
+      "total": 30,
+      "detectedByMean": "0.0%",
+      "detectedByDwell": "0.0%",
+      "detectedByDwellUniformity": "0.0%",
+      "detectedByAnyNewCheck": "3.3%"
+    },
+    "sophisticated": {
+      "total": 30,
+      "detectedByMean": "0.0%",
+      "detectedByDwell": "0.0%",
+      "detectedByDwellUniformity": "0.0%",
+      "detectedByAnyNewCheck": "0.0%"
+    }
+  },
+  "thirtyDaySimulation": {
+    "days": 30,
+    "users": 20,
+    "summary": {
+      "avgReviewsPerDay": 0.71,
+      "avgFinalConsistency": 0.889,
+      "reachedHigh": 13,
+      "reachedMedium": 4,
+      "stuckLow": 3,
+      "stuckNone": 0
+    },
+    "profiles": [
+      {
+        "profileId": "fast_desktop-0",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 5,
+        "reviewsPerDay": 0.17,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 12,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 22,
+            "hour": 18,
+            "consistency": 0.875,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.875,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "fast_desktop-1",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 15,
+        "reviewsPerDay": 0.5,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 1,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 6,
+            "hour": 14,
+            "consistency": 0.959,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 12,
+            "hour": 11,
+            "consistency": 0.896,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 28,
+            "hour": 10,
+            "consistency": 0.878,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.878,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-2",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 16,
+        "reviewsPerDay": 0.53,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 7,
+            "hour": 8,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 11,
+            "hour": 9,
+            "consistency": 0.934,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 17,
+            "hour": 16,
+            "consistency": 0.901,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 24,
+            "hour": 13,
+            "consistency": 0.896,
+            "confidence": "high"
+          },
+          {
+            "session": 16,
+            "day": 27,
+            "hour": 21,
+            "consistency": 0.896,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.896,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-3",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 32,
+        "reviewsPerDay": 1.07,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 21,
+            "consistency": 0.894,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 9,
+            "hour": 13,
+            "consistency": 0.908,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 12,
+            "hour": 16,
+            "consistency": 0.919,
+            "confidence": "high"
+          },
+          {
+            "session": 32,
+            "day": 29,
+            "hour": 17,
+            "consistency": 0.912,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.912,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-4",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 40,
+        "reviewsPerDay": 1.33,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 1,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0.675,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 8,
+            "hour": 21,
+            "consistency": 0.763,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 9,
+            "hour": 15,
+            "consistency": 0.798,
+            "confidence": "high"
+          },
+          {
+            "session": 40,
+            "day": 28,
+            "hour": 8,
+            "consistency": 0.868,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.868,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-5",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 46,
+        "reviewsPerDay": 1.53,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 2,
+            "hour": 13,
+            "consistency": 0.839,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 6,
+            "hour": 10,
+            "consistency": 0.881,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 10,
+            "hour": 15,
+            "consistency": 0.902,
+            "confidence": "high"
+          },
+          {
+            "session": 46,
+            "day": 29,
+            "hour": 13,
+            "consistency": 0.904,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.904,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-6",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 61,
+        "reviewsPerDay": 2.03,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 16,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 2,
+            "hour": 10,
+            "consistency": 0.931,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 4,
+            "hour": 20,
+            "consistency": 0.909,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 6,
+            "hour": 19,
+            "consistency": 0.903,
+            "confidence": "high"
+          },
+          {
+            "session": 61,
+            "day": 29,
+            "hour": 11,
+            "consistency": 0.9,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.9,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-7",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 58,
+        "reviewsPerDay": 1.93,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 1,
+            "hour": 12,
+            "consistency": 0.935,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 3,
+            "hour": 15,
+            "consistency": 0.924,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 5,
+            "hour": 20,
+            "consistency": 0.919,
+            "confidence": "high"
+          },
+          {
+            "session": 58,
+            "day": 29,
+            "hour": 21,
+            "consistency": 0.914,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.914,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-0",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 3,
+        "reviewsPerDay": 0.1,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 17,
+            "hour": 16,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 3,
+            "day": 27,
+            "hour": 20,
+            "consistency": 0.815,
+            "confidence": "low"
+          }
+        ],
+        "finalConsistency": 0.815,
+        "finalConfidence": "low"
+      },
+      {
+        "profileId": "avg_desktop-1",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 2,
+        "reviewsPerDay": 0.07,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 2,
+            "day": 10,
+            "hour": 16,
+            "consistency": 0.974,
+            "confidence": "low"
+          }
+        ],
+        "finalConsistency": 0.974,
+        "finalConfidence": "low"
+      },
+      {
+        "profileId": "avg_desktop-2",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 2,
+        "reviewsPerDay": 0.07,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 3,
+            "hour": 9,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 2,
+            "day": 18,
+            "hour": 13,
+            "consistency": 0.924,
+            "confidence": "low"
+          }
+        ],
+        "finalConsistency": 0.924,
+        "finalConfidence": "low"
+      },
+      {
+        "profileId": "avg_desktop-3",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 7,
+        "reviewsPerDay": 0.23,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 8,
+            "hour": 17,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 20,
+            "hour": 12,
+            "consistency": 0.916,
+            "confidence": "medium"
+          },
+          {
+            "session": 7,
+            "day": 29,
+            "hour": 11,
+            "consistency": 0.911,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.911,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-4",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 12,
+        "reviewsPerDay": 0.4,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 14,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 12,
+            "hour": 20,
+            "consistency": 0.864,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 27,
+            "hour": 16,
+            "consistency": 0.871,
+            "confidence": "medium"
+          },
+          {
+            "session": 12,
+            "day": 29,
+            "hour": 12,
+            "consistency": 0.88,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.88,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-5",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 8,
+        "reviewsPerDay": 0.27,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 4,
+            "hour": 13,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 18,
+            "hour": 21,
+            "consistency": 0.908,
+            "confidence": "medium"
+          },
+          {
+            "session": 8,
+            "day": 29,
+            "hour": 21,
+            "consistency": 0.904,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.904,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-6",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 15,
+        "reviewsPerDay": 0.5,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 2,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0.831,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 15,
+            "hour": 11,
+            "consistency": 0.82,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 25,
+            "hour": 20,
+            "consistency": 0.846,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.846,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-7",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 16,
+        "reviewsPerDay": 0.53,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 8,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 6,
+            "hour": 8,
+            "consistency": 0.898,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 14,
+            "hour": 11,
+            "consistency": 0.856,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 26,
+            "hour": 14,
+            "consistency": 0.853,
+            "confidence": "high"
+          },
+          {
+            "session": 16,
+            "day": 27,
+            "hour": 16,
+            "consistency": 0.854,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.854,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-8",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 20,
+        "reviewsPerDay": 0.67,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 15,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 10,
+            "hour": 11,
+            "consistency": 0.8,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 15,
+            "hour": 12,
+            "consistency": 0.828,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 22,
+            "hour": 18,
+            "consistency": 0.853,
+            "confidence": "high"
+          },
+          {
+            "session": 20,
+            "day": 29,
+            "hour": 19,
+            "consistency": 0.857,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.857,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-9",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 18,
+        "reviewsPerDay": 0.6,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 2,
+            "hour": 12,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 8,
+            "hour": 21,
+            "consistency": 0.857,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 18,
+            "hour": 11,
+            "consistency": 0.858,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 26,
+            "hour": 21,
+            "consistency": 0.883,
+            "confidence": "high"
+          },
+          {
+            "session": 18,
+            "day": 28,
+            "hour": 19,
+            "consistency": 0.886,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.886,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-10",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 21,
+        "reviewsPerDay": 0.7,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 4,
+            "hour": 21,
+            "consistency": 0.855,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 10,
+            "hour": 10,
+            "consistency": 0.887,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 16,
+            "hour": 18,
+            "consistency": 0.896,
+            "confidence": "high"
+          },
+          {
+            "session": 21,
+            "day": 23,
+            "hour": 19,
+            "consistency": 0.896,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.896,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-11",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 28,
+        "reviewsPerDay": 0.93,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 9,
+            "hour": 20,
+            "consistency": 0.777,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 18,
+            "hour": 16,
+            "consistency": 0.834,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 20,
+            "hour": 14,
+            "consistency": 0.861,
+            "confidence": "high"
+          },
+          {
+            "session": 28,
+            "day": 29,
+            "hour": 13,
+            "consistency": 0.884,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.884,
+        "finalConfidence": "high"
+      }
+    ]
+  },
+  "ninetyDaySimulation": {
+    "days": 90,
+    "users": 20,
+    "summary": {
+      "avgReviewsPerDay": 0.7,
+      "avgFinalConsistency": 0.889,
+      "reachedHigh": 18,
+      "reachedMedium": 2,
+      "stuckLow": 0,
+      "stuckNone": 0
+    },
+    "profiles": [
+      {
+        "profileId": "fast_desktop-0",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 22,
+        "reviewsPerDay": 0.24,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 12,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 22,
+            "hour": 18,
+            "consistency": 0.875,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 43,
+            "hour": 11,
+            "consistency": 0.874,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 53,
+            "hour": 9,
+            "consistency": 0.876,
+            "confidence": "high"
+          },
+          {
+            "session": 22,
+            "day": 89,
+            "hour": 15,
+            "consistency": 0.875,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.875,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-1",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 45,
+        "reviewsPerDay": 0.5,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 1,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 6,
+            "hour": 14,
+            "consistency": 0.959,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 12,
+            "hour": 11,
+            "consistency": 0.896,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 28,
+            "hour": 10,
+            "consistency": 0.878,
+            "confidence": "high"
+          },
+          {
+            "session": 45,
+            "day": 88,
+            "hour": 10,
+            "consistency": 0.894,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.894,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-2",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 60,
+        "reviewsPerDay": 0.67,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 7,
+            "hour": 8,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 11,
+            "hour": 9,
+            "consistency": 0.934,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 17,
+            "hour": 16,
+            "consistency": 0.901,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 24,
+            "hour": 13,
+            "consistency": 0.896,
+            "confidence": "high"
+          },
+          {
+            "session": 60,
+            "day": 88,
+            "hour": 20,
+            "consistency": 0.901,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.901,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-3",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 88,
+        "reviewsPerDay": 0.98,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 21,
+            "consistency": 0.894,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 9,
+            "hour": 13,
+            "consistency": 0.908,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 12,
+            "hour": 16,
+            "consistency": 0.919,
+            "confidence": "high"
+          },
+          {
+            "session": 88,
+            "day": 89,
+            "hour": 14,
+            "consistency": 0.899,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.899,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-4",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 112,
+        "reviewsPerDay": 1.24,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 1,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0.675,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 8,
+            "hour": 21,
+            "consistency": 0.763,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 9,
+            "hour": 15,
+            "consistency": 0.798,
+            "confidence": "high"
+          },
+          {
+            "session": 112,
+            "day": 89,
+            "hour": 20,
+            "consistency": 0.886,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.886,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-5",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 145,
+        "reviewsPerDay": 1.61,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 21,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 2,
+            "hour": 13,
+            "consistency": 0.839,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 6,
+            "hour": 10,
+            "consistency": 0.881,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 10,
+            "hour": 15,
+            "consistency": 0.902,
+            "confidence": "high"
+          },
+          {
+            "session": 145,
+            "day": 89,
+            "hour": 14,
+            "consistency": 0.898,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.898,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-6",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 158,
+        "reviewsPerDay": 1.76,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 16,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 2,
+            "hour": 10,
+            "consistency": 0.931,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 4,
+            "hour": 20,
+            "consistency": 0.909,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 6,
+            "hour": 19,
+            "consistency": 0.903,
+            "confidence": "high"
+          },
+          {
+            "session": 158,
+            "day": 89,
+            "hour": 20,
+            "consistency": 0.899,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.899,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "fast_desktop-7",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "totalSessions": 171,
+        "reviewsPerDay": 1.9,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 1,
+            "hour": 12,
+            "consistency": 0.935,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 3,
+            "hour": 15,
+            "consistency": 0.924,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 5,
+            "hour": 20,
+            "consistency": 0.919,
+            "confidence": "high"
+          },
+          {
+            "session": 171,
+            "day": 89,
+            "hour": 20,
+            "consistency": 0.902,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.902,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-0",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 8,
+        "reviewsPerDay": 0.09,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 17,
+            "hour": 16,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 50,
+            "hour": 20,
+            "consistency": 0.78,
+            "confidence": "medium"
+          },
+          {
+            "session": 8,
+            "day": 84,
+            "hour": 12,
+            "consistency": 0.781,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.781,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-1",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 16,
+        "reviewsPerDay": 0.18,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 40,
+            "hour": 19,
+            "consistency": 0.885,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 70,
+            "hour": 18,
+            "consistency": 0.897,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 85,
+            "hour": 14,
+            "consistency": 0.899,
+            "confidence": "high"
+          },
+          {
+            "session": 16,
+            "day": 87,
+            "hour": 15,
+            "consistency": 0.895,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.895,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-2",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 13,
+        "reviewsPerDay": 0.14,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 3,
+            "hour": 9,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 52,
+            "hour": 18,
+            "consistency": 0.919,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 67,
+            "hour": 18,
+            "consistency": 0.921,
+            "confidence": "medium"
+          },
+          {
+            "session": 13,
+            "day": 82,
+            "hour": 8,
+            "consistency": 0.924,
+            "confidence": "medium"
+          }
+        ],
+        "finalConsistency": 0.924,
+        "finalConfidence": "medium"
+      },
+      {
+        "profileId": "avg_desktop-3",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 18,
+        "reviewsPerDay": 0.2,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 8,
+            "hour": 17,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 20,
+            "hour": 12,
+            "consistency": 0.916,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 61,
+            "hour": 19,
+            "consistency": 0.917,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 68,
+            "hour": 18,
+            "consistency": 0.905,
+            "confidence": "high"
+          },
+          {
+            "session": 18,
+            "day": 86,
+            "hour": 16,
+            "consistency": 0.894,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.894,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-4",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 28,
+        "reviewsPerDay": 0.31,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 14,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 12,
+            "hour": 20,
+            "consistency": 0.864,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 27,
+            "hour": 16,
+            "consistency": 0.871,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 36,
+            "hour": 14,
+            "consistency": 0.882,
+            "confidence": "high"
+          },
+          {
+            "session": 28,
+            "day": 88,
+            "hour": 11,
+            "consistency": 0.898,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.898,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-5",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 37,
+        "reviewsPerDay": 0.41,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 4,
+            "hour": 13,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 18,
+            "hour": 21,
+            "consistency": 0.908,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 35,
+            "hour": 11,
+            "consistency": 0.875,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 43,
+            "hour": 12,
+            "consistency": 0.87,
+            "confidence": "high"
+          },
+          {
+            "session": 37,
+            "day": 89,
+            "hour": 13,
+            "consistency": 0.892,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.892,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-6",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 41,
+        "reviewsPerDay": 0.46,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 2,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0.831,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 15,
+            "hour": 11,
+            "consistency": 0.82,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 25,
+            "hour": 20,
+            "consistency": 0.846,
+            "confidence": "high"
+          },
+          {
+            "session": 41,
+            "day": 84,
+            "hour": 18,
+            "consistency": 0.881,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.881,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-7",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 55,
+        "reviewsPerDay": 0.61,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 8,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 6,
+            "hour": 8,
+            "consistency": 0.898,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 14,
+            "hour": 11,
+            "consistency": 0.856,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 26,
+            "hour": 14,
+            "consistency": 0.853,
+            "confidence": "high"
+          },
+          {
+            "session": 55,
+            "day": 86,
+            "hour": 15,
+            "consistency": 0.884,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.884,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-8",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 61,
+        "reviewsPerDay": 0.68,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 6,
+            "hour": 15,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 10,
+            "hour": 11,
+            "consistency": 0.8,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 15,
+            "hour": 12,
+            "consistency": 0.828,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 22,
+            "hour": 18,
+            "consistency": 0.853,
+            "confidence": "high"
+          },
+          {
+            "session": 61,
+            "day": 89,
+            "hour": 9,
+            "consistency": 0.894,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.894,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-9",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 56,
+        "reviewsPerDay": 0.62,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 2,
+            "hour": 12,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 8,
+            "hour": 21,
+            "consistency": 0.857,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 18,
+            "hour": 11,
+            "consistency": 0.858,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 26,
+            "hour": 21,
+            "consistency": 0.883,
+            "confidence": "high"
+          },
+          {
+            "session": 56,
+            "day": 85,
+            "hour": 9,
+            "consistency": 0.885,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.885,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-10",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 58,
+        "reviewsPerDay": 0.64,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 0,
+            "hour": 20,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 4,
+            "hour": 21,
+            "consistency": 0.855,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 10,
+            "hour": 10,
+            "consistency": 0.887,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 16,
+            "hour": 18,
+            "consistency": 0.896,
+            "confidence": "high"
+          },
+          {
+            "session": 58,
+            "day": 89,
+            "hour": 15,
+            "consistency": 0.907,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.907,
+        "finalConfidence": "high"
+      },
+      {
+        "profileId": "avg_desktop-11",
+        "type": "avg_desktop",
+        "platform": "desktop",
+        "totalSessions": 69,
+        "reviewsPerDay": 0.77,
+        "milestones": [
+          {
+            "session": 1,
+            "day": 5,
+            "hour": 18,
+            "consistency": 0,
+            "confidence": "low"
+          },
+          {
+            "session": 5,
+            "day": 9,
+            "hour": 20,
+            "consistency": 0.777,
+            "confidence": "medium"
+          },
+          {
+            "session": 10,
+            "day": 18,
+            "hour": 16,
+            "consistency": 0.834,
+            "confidence": "medium"
+          },
+          {
+            "session": 15,
+            "day": 20,
+            "hour": 14,
+            "consistency": 0.861,
+            "confidence": "high"
+          },
+          {
+            "session": 69,
+            "day": 89,
+            "hour": 15,
+            "consistency": 0.9,
+            "confidence": "high"
+          }
+        ],
+        "finalConsistency": 0.9,
+        "finalConfidence": "high"
+      }
+    ]
+  }
+}

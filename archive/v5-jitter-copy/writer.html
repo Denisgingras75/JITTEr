@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Anvil Writer | Verified Environment</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #ddd;
+            font-family: 'Georgia', serif; /* Academic feel */
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* SIDEBAR (The Audit Log) */
+        #sidebar {
+            width: 250px;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .stat-box { margin-bottom: 20px; }
+        .label { font-size: 11px; text-transform: uppercase; color: #666; letter-spacing: 1px; }
+        .value { font-size: 24px; font-weight: bold; color: #fff; font-family: sans-serif; }
+        .sub-value { font-size: 12px; color: #888; }
+        
+        #shield-icon { font-size: 50px; margin-bottom: 10px; display: block; }
+        .status-green { color: #00BA7C; }
+        .status-red { color: #FF4444; }
+
+        /* EDITOR (The Paper) */
+        #editor-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            overflow-y: auto;
+            padding-top: 50px;
+        }
+        #editor {
+            width: 800px;
+            min-height: 80vh;
+            outline: none;
+            font-size: 18px;
+            line-height: 1.8;
+            color: #ccc;
+            white-space: pre-wrap; /* Preserve formatting */
+        }
+        #editor:empty:before {
+            content: "Start writing your verified draft...";
+            color: #444;
+        }
+
+        /* ACTIONS */
+        .btn {
+            background: #333; color: #fff; border: none; padding: 12px; 
+            width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold;
+            margin-top: 10px; transition: 0.2s;
+        }
+        .btn:hover { background: #444; }
+        .btn-primary { background: #00BA7C; color: #000; }
+        .btn-primary:hover { background: #009e69; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div>
+            <div style="text-align:center; margin-bottom:40px;">
+                <span id="shield-icon">🛡️</span>
+                <div id="status-text" class="status-green" style="font-weight:bold;">LIVE AUDIT</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="label">PURITY SCORE</div>
+                <div class="value" id="purity-display">100%</div>
+                <div class="sub-value">Target: >90%</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="label">SESSION STATS</div>
+                <div class="sub-value">Typed: <span id="human-count" style="color:#fff">0</span></div>
+                <div class="sub-value">Pasted: <span id="alien-count" style="color:#ff6b6b">0</span></div>
+            </div>
+            
+            <div class="stat-box">
+                <div class="label">BIOMETRICS</div>
+                <div class="sub-value">Jitter: <span id="jitter-display">0.00s</span></div>
+            </div>
+        </div>
+
+        <div>
+            <button class="btn btn-primary" id="btn-export">EXPORT & SIGN</button>
+            <button class="btn" id="btn-reset">RESET SESSION</button>
+        </div>
+    </div>
+
+    <div id="editor-container">
+        <div id="editor" contenteditable="true"></div>
+    </div>
+
+    <script src="writer.js"></script>
+</body>
+</html>

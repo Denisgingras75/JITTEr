@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jitter — Type naturally. We'll show you what we see.</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px;
+    }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { color: #737373; font-size: 14px; margin-bottom: 40px; }
+    .card {
+      background: #171717;
+      border: 1px solid #262626;
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 520px;
+    }
+    label { display: block; font-size: 13px; font-weight: 600; color: #a3a3a3; margin-bottom: 8px; }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #404040;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      font-size: 15px;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: #22c55e; }
+    .actions { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+    button {
+      padding: 10px 24px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: #22c55e; color: #0a0a0a; }
+    .btn-primary:hover { background: #16a34a; }
+    .btn-secondary { background: #262626; color: #a3a3a3; }
+    .btn-secondary:hover { background: #404040; }
+    #result {
+      margin-top: 24px;
+      padding: 20px;
+      border-radius: 12px;
+      background: #0a0a0a;
+      border: 1px solid #262626;
+      font-family: "SF Mono", Monaco, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      display: none;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+    .live-stats {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #525252;
+      font-family: "SF Mono", Monaco, monospace;
+      min-height: 18px;
+    }
+    .badge-preview { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .footer { margin-top: 40px; font-size: 12px; color: #404040; text-align: center; }
+    .footer a { color: #525252; }
+    .error { color: #ef4444; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Jitter</h1>
+  <p class="subtitle">Type naturally. We'll show you what we see.</p>
+
+  <div class="card">
+    <label for="review">Write a review</label>
+    <textarea id="review" placeholder="What did you think of the lobster roll? Type at least a sentence..."></textarea>
+    <div class="live-stats" id="stats">Start typing to see live biometrics...</div>
+    <div class="actions">
+      <button class="btn-primary" id="score-btn">Score Session</button>
+      <button class="btn-secondary" id="reset-btn">Reset</button>
+    </div>
+    <pre id="result"></pre>
+    <div class="badge-preview" id="badges"></div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <p class="footer">
+    We see HOW you type, never WHAT you type.<br>
+    Raw keystrokes never leave your device. Only aggregated timing stats.
+  </p>
+
+  <script src="jitter.min.js"></script>
+  <script>
+    var textarea = document.getElementById('review')
+    var statsEl = document.getElementById('stats')
+    var resultEl = document.getElementById('result')
+    var badgesEl = document.getElementById('badges')
+    var errorEl = document.getElementById('error')
+    var box = null
+    var keystrokeCount = 0
+
+    // Check JitterBox loaded
+    if (typeof JitterBox === 'undefined') {
+      errorEl.textContent = 'Error: jitter.min.js failed to load'
+    } else {
+      box = JitterBox.attach(textarea)
+
+      // Track keystrokes manually for live display
+      textarea.addEventListener('keydown', function(e) {
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          keystrokeCount++
+        }
+      })
+    }
+
+    // Live stats — simple keystroke counter (don't call score() repeatedly)
+    setInterval(function() {
+      if (!box || keystrokeCount === 0) return
+      statsEl.textContent = 'keystrokes: ' + keystrokeCount +
+        (keystrokeCount < 20 ? '  |  need ' + (20 - keystrokeCount) + ' more for score' : '  |  ready to score')
+    }, 300)
+
+    document.getElementById('score-btn').addEventListener('click', function() {
+      errorEl.textContent = ''
+      resultEl.style.display = 'block'
+
+      if (!box) {
+        resultEl.textContent = 'JitterBox not attached. Check console.'
+        return
+      }
+
+      var result = box.score()
+
+      if (!result) {
+        resultEl.textContent = 'Not enough data. Type at least 20 characters naturally (not pasted).'
+        return
+      }
+
+      // Show the full result
+      var display = {
+        war: result.war,
+        classification: result.classification,
+        purity: result.purity + '%',
+        flags: result.flags,
+        session: result.session,
+        components: result.components,
+        profile: {
+          mean_inter_key: result.profile.mean_inter_key + 'ms',
+          std_inter_key: result.profile.std_inter_key + 'ms',
+          mean_dwell: result.profile.mean_dwell + 'ms',
+          std_dwell: result.profile.std_dwell + 'ms',
+          edit_ratio: result.profile.edit_ratio,
+          pause_freq: result.profile.pause_freq,
+          bigrams_tracked: Object.keys(result.profile.bigram_signatures || {}).length,
+          per_key_tracked: Object.keys(result.profile.per_key_dwell || {}).length,
+        }
+      }
+      resultEl.textContent = JSON.stringify(display, null, 2)
+
+      // Show badge
+      badgesEl.innerHTML = ''
+      var badge = document.createElement('span')
+      var colors = { verified: '#22c55e', suspicious: '#eab308', bot: '#ef4444' }
+      var color = colors[result.classification] || '#6b7280'
+      badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:6px 16px;border-radius:999px;font-size:14px;font-weight:600;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;'
+      var labels = { verified: 'Human Verified', suspicious: 'Under Review', bot: 'Automated' }
+      badge.textContent = (labels[result.classification] || 'Unknown') + ' — WAR ' + result.war
+      badgesEl.appendChild(badge)
+    })
+
+    document.getElementById('reset-btn').addEventListener('click', function() {
+      if (box) box.reset()
+      keystrokeCount = 0
+      textarea.value = ''
+      resultEl.style.display = 'none'
+      badgesEl.innerHTML = ''
+      errorEl.textContent = ''
+      statsEl.textContent = 'Start typing to see live biometrics...'
+    })
+  </script>
+</body>
+</html>

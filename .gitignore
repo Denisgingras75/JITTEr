@@ -1,5 +1,7 @@
 # Build artifacts
 *.zip
+sdk/dist/
+node_modules/
 
 # OS files
 .DS_Store
@@ -9,12 +11,19 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Chrome extension generated files
+# Chrome extension
 *.crx
 *.pem
 
-# Claude Code coordination channel (local runtime state)
-.claude-coord/sessions/
-.claude-coord/claims/
-.claude-coord/messages/
-.claude-coord/.locks/
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+
+# Claude
+.claude-coord/
+
+# Secrets
+.env
+.env.local

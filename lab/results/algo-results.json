@@ -1,0 +1,162 @@
+{
+  "sameUser": {
+    "avgSessionsToHigh": 15,
+    "reachedHighRate": "100.0%",
+    "avgConsistency": "0.890",
+    "minConsistency": "0.804",
+    "maxConsistency": "0.944"
+  },
+  "crossUser": {
+    "falseMatchRate": "61.0%",
+    "falseMatchCount": 122,
+    "avgCrossConsistency": "0.494",
+    "medianCrossConsistency": "0.464"
+  },
+  "botDetection": {
+    "zero_delay": {
+      "detected": 33,
+      "total": 33,
+      "detectionRate": "100.0%",
+      "passedMeanCheck": 0,
+      "passedMeanRate": "0.0%",
+      "avgConsistency": "0.000",
+      "avgBotEntropy": "0.000",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.000",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.000",
+      "avgHumanDwellUniformity": "0.995"
+    },
+    "fixed_delay": {
+      "detected": 0,
+      "total": 33,
+      "detectionRate": "0.0%",
+      "passedMeanCheck": 33,
+      "passedMeanRate": "100.0%",
+      "avgConsistency": "0.856",
+      "avgBotEntropy": "0.000",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.000",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.000",
+      "avgHumanDwellUniformity": "0.995"
+    },
+    "uniform_random": {
+      "detected": 0,
+      "total": 33,
+      "detectionRate": "0.0%",
+      "passedMeanCheck": 33,
+      "passedMeanRate": "100.0%",
+      "avgConsistency": "0.712",
+      "avgBotEntropy": "3.321",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.377",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.435",
+      "avgHumanDwellUniformity": "0.995"
+    },
+    "gaussian_mimic": {
+      "detected": 0,
+      "total": 33,
+      "detectionRate": "0.0%",
+      "passedMeanCheck": 33,
+      "passedMeanRate": "100.0%",
+      "avgConsistency": "0.924",
+      "avgBotEntropy": "2.716",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.290",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.000",
+      "avgHumanDwellUniformity": "0.995"
+    },
+    "replay": {
+      "detected": 0,
+      "total": 33,
+      "detectionRate": "0.0%",
+      "passedMeanCheck": 33,
+      "passedMeanRate": "100.0%",
+      "avgConsistency": "0.908",
+      "avgBotEntropy": "2.713",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.286",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.967",
+      "avgHumanDwellUniformity": "0.995"
+    },
+    "sophisticated": {
+      "detected": 0,
+      "total": 33,
+      "detectionRate": "0.0%",
+      "passedMeanCheck": 33,
+      "passedMeanRate": "100.0%",
+      "avgConsistency": "0.954",
+      "avgBotEntropy": "2.700",
+      "avgHumanEntropy": "2.708",
+      "avgBotCV": "0.285",
+      "avgHumanCV": "0.287",
+      "avgBotDwellUniformity": "0.251",
+      "avgHumanDwellUniformity": "0.995"
+    }
+  },
+  "replayAttack": {
+    "detected": 0,
+    "total": 200,
+    "detectionRate": "0.0%",
+    "perfectConsistencyCount": 13,
+    "perfectConsistencyRate": "6.5%",
+    "avgConsistency": "0.907",
+    "vulnerability": "Partial: Some replay detection via noise"
+  },
+  "noiseDegradation": {
+    "5%": {
+      "badgeLostRate": "0.0%",
+      "avgConsistency": "0.898",
+      "minConsistency": "0.754"
+    },
+    "10%": {
+      "badgeLostRate": "0.0%",
+      "avgConsistency": "0.885",
+      "minConsistency": "0.695"
+    },
+    "15%": {
+      "badgeLostRate": "0.0%",
+      "avgConsistency": "0.859",
+      "minConsistency": "0.636"
+    },
+    "20%": {
+      "badgeLostRate": "0.0%",
+      "avgConsistency": "0.818",
+      "minConsistency": "0.576"
+    },
+    "30%": {
+      "badgeLostRate": "0.0%",
+      "avgConsistency": "0.717",
+      "minConsistency": "0.458"
+    },
+    "50%": {
+      "badgeLostRate": "15.0%",
+      "avgConsistency": "0.510",
+      "minConsistency": "0.221"
+    },
+    "75%": {
+      "badgeLostRate": "85.0%",
+      "avgConsistency": "0.259",
+      "minConsistency": "0.000"
+    },
+    "100%": {
+      "badgeLostRate": "100.0%",
+      "avgConsistency": "0.047",
+      "minConsistency": "0.000"
+    },
+    "150%": {
+      "badgeLostRate": "100.0%",
+      "avgConsistency": "0.000",
+      "minConsistency": "0.000"
+    },
+    "200%": {
+      "badgeLostRate": "100.0%",
+      "avgConsistency": "0.000",
+      "minConsistency": "0.000"
+    }
+  }
+}

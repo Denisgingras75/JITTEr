@@ -1,0 +1,331 @@
+{
+  "goals": {
+    "bot_detection_min": 95,
+    "false_positive_max": 1,
+    "night_false_positive_max": 2,
+    "mobile_false_positive_max": 2,
+    "power_false_positive_max": 2,
+    "replay_detection_min": 80,
+    "cross_user_false_match_max": 20
+  },
+  "botDetection": {
+    "byType": {
+      "zero_delay": {
+        "detected": 100,
+        "total": 100,
+        "detectionRate": "100.0%",
+        "avgScore": 0,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "dwell_floor": 100,
+          "variance_floor": 100,
+          "iki_floor": 100,
+          "dwell_uniformity_hard": 100,
+          "dwell_uniformity": 100,
+          "zero_humanity": 100,
+          "dwell_std_floor": 100
+        }
+      },
+      "fixed_delay": {
+        "detected": 100,
+        "total": 100,
+        "detectionRate": "100.0%",
+        "avgScore": 0,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "dwell_floor": 100,
+          "variance_floor": 100,
+          "dwell_uniformity_hard": 100,
+          "dwell_uniformity": 100,
+          "cv_floor": 100,
+          "zero_humanity": 100,
+          "dwell_std_floor": 100,
+          "flat_bigrams": 100
+        }
+      },
+      "uniform_random": {
+        "detected": 100,
+        "total": 100,
+        "detectionRate": "100.0%",
+        "avgScore": 0,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "dwell_floor": 100,
+          "zero_humanity": 100,
+          "dwell_std_floor": 100,
+          "flat_bigrams": 100,
+          "perfect_consistency": 1,
+          "dwell_uniformity": 2
+        }
+      },
+      "gaussian_mimic": {
+        "detected": 100,
+        "total": 100,
+        "detectionRate": "100.0%",
+        "avgScore": 0,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "dwell_floor": 100,
+          "dwell_uniformity_hard": 100,
+          "dwell_uniformity": 100,
+          "zero_humanity": 100,
+          "dwell_std_floor": 100,
+          "perfect_consistency": 2
+        }
+      },
+      "replay": {
+        "detected": 100,
+        "total": 100,
+        "detectionRate": "100.0%",
+        "avgScore": 0,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "session_duplicate": 100
+        }
+      },
+      "sophisticated": {
+        "detected": 96,
+        "total": 100,
+        "detectionRate": "96.0%",
+        "avgScore": 0.393,
+        "meetsGoal": true,
+        "flagBreakdown": {
+          "dwell_uniformity_hard": 20,
+          "dwell_uniformity": 92,
+          "dwell_std_floor": 15,
+          "low_humanity": 82,
+          "dwell_std_low": 30,
+          "replay_detected": 7,
+          "composite_suspicion": 2,
+          "perfect_consistency": 1
+        }
+      }
+    },
+    "overallDetectionRate": "99.3%",
+    "overallMeetsGoal": true
+  },
+  "falsePositives": {
+    "falsePositives": 2,
+    "total": 500,
+    "falsePositiveRate": "0.4%",
+    "meetsGoal": true,
+    "details": [
+      {
+        "profileId": "fast_desktop-4",
+        "type": "fast_desktop",
+        "platform": "desktop",
+        "flags": [
+          {
+            "check": "replay_detected",
+            "value": "4 metrics match profile",
+            "threshold": "<4 expected"
+          },
+          {
+            "check": "composite_suspicion",
+            "value": "2 borderline metrics",
+            "threshold": "< 3 borderline"
+          }
+        ],
+        "score": 0.35
+      },
+      {
+        "profileId": "slow_desktop-1",
+        "type": "slow_desktop",
+        "platform": "desktop",
+        "flags": [
+          {
+            "check": "dwell_uniformity",
+            "value": 0.0773,
+            "threshold": 0.09
+          },
+          {
+            "check": "perfect_consistency",
+            "value": 0.9995,
+            "threshold": "< 0.998"
+          }
+        ],
+        "score": 0.6
+      }
+    ]
+  },
+  "nightFalsePositives": {
+    "falsePositives": 1,
+    "total": 140,
+    "falsePositiveRate": "0.7%",
+    "meetsGoal": true
+  },
+  "mobileFalsePositives": {
+    "falsePositives": 1,
+    "total": 160,
+    "falsePositiveRate": "0.6%",
+    "meetsGoal": true
+  },
+  "powerFalsePositives": {
+    "falsePositives": 2,
+    "total": 110,
+    "falsePositiveRate": "1.8%",
+    "meetsGoal": true
+  },
+  "replayDetection": {
+    "detected": 200,
+    "total": 200,
+    "detectionRate": "100.0%",
+    "meetsGoal": true,
+    "flagBreakdown": {
+      "session_duplicate": 200
+    }
+  },
+  "sophisticatedBotDeepDive": {
+    "detected": 96,
+    "total": 100,
+    "detectionRate": "96.0%",
+    "meetsGoal": true,
+    "avgScore": 0.393,
+    "flagBreakdown": {
+      "dwell_uniformity_hard": 20,
+      "dwell_uniformity": 92,
+      "dwell_std_floor": 15,
+      "low_humanity": 82,
+      "dwell_std_low": 30,
+      "replay_detected": 7,
+      "composite_suspicion": 2,
+      "perfect_consistency": 1
+    },
+    "nearMissCount": 2,
+    "nearMisses": [
+      {
+        "run": 38,
+        "humanProfileIdx": 18,
+        "flags": [
+          {
+            "check": "low_humanity",
+            "value": "edit=0.027, pause=0.38",
+            "threshold": "edit>0.03 OR pause>=0.4"
+          }
+        ],
+        "score": 0.75,
+        "botMean": 272.62,
+        "botStd": 61.67,
+        "botDwell": 121.67,
+        "botStdDwell": 16.34,
+        "botDwellCV": 0.0974,
+        "botDwellVarRatio": 0.1343,
+        "botEditRatio": 0.027,
+        "botPauseFreq": 0.38
+      },
+      {
+        "run": 77,
+        "humanProfileIdx": 17,
+        "flags": [
+          {
+            "check": "low_humanity",
+            "value": "edit=0.027, pause=0.36",
+            "threshold": "edit>0.03 OR pause>=0.4"
+          }
+        ],
+        "score": 0.75,
+        "botMean": 262.89,
+        "botStd": 58,
+        "botDwell": 118,
+        "botStdDwell": 15.6,
+        "botDwellCV": 0.1066,
+        "botDwellVarRatio": 0.1322,
+        "botEditRatio": 0.027,
+        "botPauseFreq": 0.36
+      }
+    ],
+    "analysis": "GOAL MET: Sophisticated bots reliably caught."
+  },
+  "scorecard": {
+    "checks": [
+      {
+        "goal": "Bot detection ≥ 95%",
+        "results": [
+          {
+            "label": "zero_delay",
+            "value": 100,
+            "passed": true
+          },
+          {
+            "label": "fixed_delay",
+            "value": 100,
+            "passed": true
+          },
+          {
+            "label": "uniform_random",
+            "value": 100,
+            "passed": true
+          },
+          {
+            "label": "gaussian_mimic",
+            "value": 100,
+            "passed": true
+          },
+          {
+            "label": "replay",
+            "value": 100,
+            "passed": true
+          },
+          {
+            "label": "sophisticated",
+            "value": 96,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "goal": "False positive ≤ 1%",
+        "results": [
+          {
+            "label": "all humans",
+            "value": 0.4,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "goal": "Night FP ≤ 2%",
+        "results": [
+          {
+            "label": "night sessions",
+            "value": 0.7,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "goal": "Mobile FP ≤ 2%",
+        "results": [
+          {
+            "label": "mobile users",
+            "value": 0.6,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "goal": "Power reviewer FP ≤ 2%",
+        "results": [
+          {
+            "label": "power reviewers",
+            "value": 1.8,
+            "passed": true
+          }
+        ]
+      },
+      {
+        "goal": "Replay detection ≥ 80%",
+        "results": [
+          {
+            "label": "replay attacks",
+            "value": 100,
+            "passed": true
+          }
+        ]
+      }
+    ],
+    "allPassed": true,
+    "passedChecks": 11,
+    "totalChecks": 11
+  }
+}

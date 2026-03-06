@@ -1,0 +1,26 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="24" fill="url(#grad)"/>
+
+  <!-- Anvil icon -->
+  <g transform="translate(32, 40)">
+    <!-- Top of anvil -->
+    <rect x="8" y="0" width="48" height="12" fill="#ffffff" rx="2"/>
+
+    <!-- Main body -->
+    <rect x="4" y="12" width="56" height="28" fill="#ffffff" rx="2"/>
+
+    <!-- Horn -->
+    <path d="M 60 20 L 64 16 L 64 32 L 60 28 Z" fill="#ffffff"/>
+
+    <!-- Base -->
+    <rect x="16" y="40" width="32" height="8" fill="#ffffff" rx="2"/>
+  </g>
+</svg>

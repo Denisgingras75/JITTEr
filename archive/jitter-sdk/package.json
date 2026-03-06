@@ -1,0 +1,17 @@
+{
+  "name": "@jitter/widget",
+  "version": "0.1.0",
+  "description": "Typing biometrics for content provenance. Transparency, not bot detection.",
+  "main": "dist/jitter.min.js",
+  "module": "src/init.js",
+  "files": ["dist/", "src/"],
+  "scripts": {
+    "build": "node build.js",
+    "dev": "npx serve examples -p 3333",
+    "test": "node tests/core.test.js"
+  },
+  "keywords": ["biometrics", "typing", "identity", "widget", "content-provenance"],
+  "author": "Denis Gingras",
+  "license": "UNLICENSED",
+  "private": true
+}

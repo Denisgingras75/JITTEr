@@ -1,0 +1,5 @@
+{
+  "name": "jitter-demo",
+  "buildCommand": "node build.js",
+  "outputDirectory": "examples"
+}
