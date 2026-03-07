@@ -8,9 +8,12 @@
  *   <script src="jitter.min.js"></script>
  *   <script src="jitter-capture.js"></script>
  *
+ * Setup (optional attestation):
+ *   JitterCapture.init({ siteKey: 'wgh', attestUrl: 'https://xxx.supabase.co/functions/v1/attest' });
+ *
  * On submit:
- *   var result = JitterCapture.score('review-text');
- *   // result = { war, classification, flags, badge, meta }
+ *   var result = await JitterCapture.scoreAndAttest('review-text', userId);
+ *   // result = { war, classification, flags, badge, meta, badge_hash, verifyUrl }
  */
 
 ;(function(global) {
@@ -262,6 +265,54 @@
     }
   }
 
-  global.JitterCapture = { attach: attachToElement, score: scoreElement, reset: resetElement }
+  // --- Config + Attestation ---
+
+  var config = { siteKey: 'wgh', attestUrl: null }
+
+  function init(opts) {
+    if (opts.siteKey) config.siteKey = opts.siteKey
+    if (opts.attestUrl) config.attestUrl = opts.attestUrl
+  }
+
+  function scoreAndAttest(elOrId, userId) {
+    var result = scoreElement(elOrId)
+
+    if (!config.attestUrl || !userId || result.war == null) {
+      return Promise.resolve(result)
+    }
+
+    return fetch(config.attestUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        site_key: config.siteKey,
+        war_score: result.war,
+        classification: result.classification,
+        flags: result.flags,
+        meta: result.meta,
+      })
+    })
+    .then(function(res) { return res.json() })
+    .then(function(data) {
+      result.badge_hash = data.badge_hash || null
+      if (data.badge_hash && config.attestUrl) {
+        result.verifyUrl = config.attestUrl.replace('/attest', '/verify') + '?hash=' + data.badge_hash
+      }
+      return result
+    })
+    .catch(function() {
+      // Never block — attestation is additive
+      return result
+    })
+  }
+
+  global.JitterCapture = {
+    init: init,
+    attach: attachToElement,
+    score: scoreElement,
+    scoreAndAttest: scoreAndAttest,
+    reset: resetElement,
+  }
 
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this)
