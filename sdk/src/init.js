@@ -21,6 +21,55 @@ var config = {
   onScore: null,
 }
 
+// ── Verification Threshold ──────────────────────────────────────────
+
+function getVerificationStatus() {
+  var count = 0
+  var firstReview = null
+  try {
+    count = parseInt(localStorage.getItem('jitter_review_count') || '0', 10)
+    var ts = localStorage.getItem('jitter_first_review')
+    if (ts) firstReview = parseInt(ts, 10)
+  } catch (e) {}
+
+  var daysSinceFirst = 0
+  if (firstReview) {
+    daysSinceFirst = Math.floor((Date.now() - firstReview) / (1000 * 60 * 60 * 24))
+  }
+
+  return {
+    eligible: count >= 3 && daysSinceFirst >= 3,
+    reviewCount: count,
+    daysSinceFirst: daysSinceFirst,
+  }
+}
+
+function recordReview() {
+  try {
+    var count = parseInt(localStorage.getItem('jitter_review_count') || '0', 10)
+    localStorage.setItem('jitter_review_count', String(count + 1))
+    if (!localStorage.getItem('jitter_first_review')) {
+      localStorage.setItem('jitter_first_review', String(Date.now()))
+    }
+  } catch (e) {}
+}
+
+function applyVerification(result) {
+  var status = getVerificationStatus()
+  result.eligible = status.eligible
+  result.reviewCount = status.reviewCount
+
+  // Bot classification overrides everything — even eligible users
+  if (result.classification === 'bot') return result
+
+  // If not yet eligible, force 'building' regardless of WAR score
+  if (!status.eligible) {
+    result.classification = 'building'
+  }
+
+  return result
+}
+
 /**
  * Initialize Jitter on the page.
  * @param {Object} opts
@@ -115,6 +164,10 @@ function score(el) {
   var result = instance.score()
   if (!result) return null
 
+  // Record this review and apply verification threshold
+  recordReview()
+  result = applyVerification(result)
+
   // Generate session token for server-side verification
   result.session_token = generateSessionToken(result)
 
@@ -178,7 +231,10 @@ var Jitter = {
   score: score,
   detach: detach,
   detachAll: detachAll,
-  version: '0.1.0',
+  createBadge: typeof createBadge !== 'undefined' ? createBadge : null,
+  insertBadge: typeof insertBadge !== 'undefined' ? insertBadge : null,
+  getVerificationStatus: getVerificationStatus,
+  version: '1.0.0',
 }
 
 if (typeof window !== 'undefined') {
@@ -187,4 +243,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = Jitter
+  module.exports.getVerificationStatus = getVerificationStatus
+  module.exports.recordReview = recordReview
+  module.exports.applyVerification = applyVerification
 }
