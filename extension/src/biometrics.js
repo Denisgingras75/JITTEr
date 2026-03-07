@@ -521,10 +521,13 @@ function scoreWAR(session, profile) {
     components.dwell_uniformity = 0.5;
   }
 
-  // 10. Purity
+  // 10. Purity — paste detection
   const total = session.humanChars + session.alienChars;
+  const pasteRatio = total > 0 ? session.alienChars / total : 0;
   if (total >= 20) {
     components.purity = rampScore(session.humanChars / total, WAR_RAMPS.purity[0], WAR_RAMPS.purity[1]);
+    if (pasteRatio > 0.50) flags.push('paste_heavy');
+    if (pasteRatio > 0.90) flags.push('paste_flood');
   } else {
     components.purity = 0.5;
   }
@@ -541,8 +544,10 @@ function scoreWAR(session, profile) {
     bigram_uniform: 0.08,
     per_key_uniformity: 0.08,
     dwell_std_hard: 0.06,
+    paste_heavy: 0.15,
     no_editing_behavior: 0.05,
     non_lognormal: 0.05,
+    paste_flood: 0.30,
   };
 
   let penalty = 0;
