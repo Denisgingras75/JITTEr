@@ -357,11 +357,13 @@ const WAR_RAMPS = {
   edit_ratio:    [0.03, 0.08],
   pause_freq:    [0.4, 1.5],
   purity:        [0, 1],
-  ks_shape:      [0.25, 0.08],
+  ks_shape:         [0.25, 0.08],
+  dwell_uniformity: [0.09, 0.25],
 };
 const WAR_WEIGHTS = {
   bigram_rhythm: 0.18, per_key: 0.15, cross_signal: 0.15, distribution: 0.12,
-  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.07, purity: 0.05,
+  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.05,
+  dwell_uniformity: 0.04, purity: 0.03,
 };
 const WAR_TIERS = [
   [0.80, 'Hall of Fame'],
@@ -423,8 +425,23 @@ function scoreWAR(session, profile) {
     return { war: 0, raw_war: 0, tier: 'Suspicious', components: {}, flags: [] };
   }
 
-  const components = {};
   const flags = [];
+
+  // === LAYER 1: Hard floors — instant WAR = 0 ===
+  const hasHardFloor =
+    (profile.mean_dwell != null && profile.mean_dwell < 27) ||
+    (profile.std_inter_key != null && profile.std_inter_key < 9) ||
+    (profile.mean_inter_key != null && profile.mean_inter_key < 54);
+
+  if (hasHardFloor) {
+    if (profile.mean_dwell < 27) flags.push('dwell_floor');
+    if (profile.std_inter_key < 9) flags.push('variance_floor');
+    if (profile.mean_inter_key < 54) flags.push('iki_floor');
+    return { war: 0, raw_war: 0, tier: 'Suspicious', components: {}, flags };
+  }
+
+  // === LAYER 3: Weighted signals (including new dwell_uniformity) ===
+  const components = {};
 
   // 1. Bigram rhythm
   const sigs = profile.bigram_signatures || {};
@@ -465,7 +482,6 @@ function scoreWAR(session, profile) {
   // 5. Inter-key variance
   if (profile.std_inter_key != null) {
     components.inter_key_var = rampScore(profile.std_inter_key, WAR_RAMPS.inter_key_var[0], WAR_RAMPS.inter_key_var[1]);
-    if (profile.std_inter_key < 9) flags.push('variance_floor');
   } else {
     components.inter_key_var = 0.5;
   }
@@ -481,7 +497,6 @@ function scoreWAR(session, profile) {
   // 7. Mean dwell
   if (profile.mean_dwell != null) {
     components.mean_dwell = rampScore(profile.mean_dwell, WAR_RAMPS.mean_dwell[0], WAR_RAMPS.mean_dwell[1]);
-    if (profile.mean_dwell < 27) flags.push('dwell_floor');
   } else {
     components.mean_dwell = 0.5;
   }
@@ -497,7 +512,16 @@ function scoreWAR(session, profile) {
     flags.push('no_editing_behavior');
   }
 
-  // 9. Purity
+  // 9. Dwell uniformity (NEW — 10th signal)
+  if (pkValues.length >= 3) {
+    const m = calcMean(pkValues);
+    const cv = m > 0 ? calcStd(pkValues) / m : 0;
+    components.dwell_uniformity = rampScore(cv, WAR_RAMPS.dwell_uniformity[0], WAR_RAMPS.dwell_uniformity[1]);
+  } else {
+    components.dwell_uniformity = 0.5;
+  }
+
+  // 10. Purity
   const total = session.humanChars + session.alienChars;
   if (total >= 20) {
     components.purity = rampScore(session.humanChars / total, WAR_RAMPS.purity[0], WAR_RAMPS.purity[1]);
@@ -512,19 +536,24 @@ function scoreWAR(session, profile) {
   }
   raw_war = round2(raw_war);
 
-  // Time confidence cap
-  let war = raw_war;
-  let timeCap = 1.0;
-  try {
-    const stored = typeof chrome !== 'undefined' && chrome.storage
-      ? null  // handled by caller passing firstSeenMs
-      : (typeof localStorage !== 'undefined' ? localStorage.getItem('jitter_first_seen') : null);
-    // firstSeenMs is passed via passport.firstUsed in the caller
-  } catch(e) {}
+  // === LAYER 2: Soft penalties ===
+  const PENALTIES = {
+    bigram_uniform: 0.08,
+    per_key_uniformity: 0.08,
+    dwell_std_hard: 0.06,
+    no_editing_behavior: 0.05,
+    non_lognormal: 0.05,
+  };
 
+  let penalty = 0;
+  for (const flag of flags) {
+    if (PENALTIES[flag]) penalty += PENALTIES[flag];
+  }
+
+  let war = round2(Math.max(0, raw_war - penalty));
   const tier = WAR_TIERS.find(([min]) => war >= min)[1];
 
-  return { war, raw_war, tier, components, flags, timeCap };
+  return { war, raw_war, tier, components, flags, timeCap: 1.0 };
 }
 
 // Time confidence cap — the economic thesis in code
