@@ -697,9 +697,36 @@ function attach(el) {
   }
 }
 
+// ── scoreRaw: build profile from raw capture arrays and score ────────
+
+function scoreRaw(captureData) {
+  if (!captureData || !captureData.flightTimes || captureData.flightTimes.length < 10) {
+    return { war: null, classification: 'insufficient_data', components: {}, flags: ['too_short'] }
+  }
+
+  var ft = captureData.flightTimes
+  var dt = captureData.dwellTimes || []
+  var totalChars = (captureData.humanChars || 0) + (captureData.alienChars || 0)
+  var backspaces = captureData.backspaceCount || 0
+  var pauses = captureData.pauseCount || 0
+
+  var profile = {
+    mean_inter_key: mean(ft),
+    std_inter_key: std(ft),
+    mean_dwell: dt.length > 0 ? mean(dt) : null,
+    std_dwell: dt.length > 0 ? std(dt) : null,
+    edit_ratio: totalChars > 0 ? backspaces / totalChars : 0,
+    pause_freq: ft.length > 0 ? pauses / (ft.length / 10) : 0,
+    per_key_dwell: {},
+    bigram_signatures: {},
+  }
+
+  return scoreProfile(profile, captureData)
+}
+
 // ── Export ──────────────────────────────────────────────────────────────
 
-var JitterBox = { attach: attach }
+var JitterBox = { attach: attach, scoreRaw: scoreRaw }
 
 if (typeof window !== 'undefined') {
   window.JitterBox = JitterBox
@@ -709,8 +736,8 @@ if (typeof window !== 'undefined') {
 var _testExports = {
   ksStatistic: ksStatistic, pearsonR: pearsonR, normalCDF: normalCDF,
   scoreProfile: scoreProfile, scoreCrossSignal: scoreCrossSignal,
-  rampScore: rampScore,
+  rampScore: rampScore, scoreRaw: scoreRaw,
 }
 
 export default JitterBox
-export { attach, _testExports }
+export { attach, scoreRaw, _testExports }
