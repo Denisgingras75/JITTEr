@@ -44,7 +44,14 @@ function getVerificationStatus() {
   }
 }
 
-function recordReview() {
+function hasTextSignal(result) {
+  return result != null && result.war != null && result.session != null &&
+    result.session.keystrokes >= 10
+}
+
+function recordReview(result) {
+  // Slider-only reviews (no text signal) don't count toward verification
+  if (!hasTextSignal(result)) return false
   try {
     var count = parseInt(localStorage.getItem('jitter_review_count') || '0', 10)
     localStorage.setItem('jitter_review_count', String(count + 1))
@@ -52,6 +59,7 @@ function recordReview() {
       localStorage.setItem('jitter_first_review', String(Date.now()))
     }
   } catch (e) {}
+  return true
 }
 
 function applyVerification(result) {
@@ -68,6 +76,42 @@ function applyVerification(result) {
   }
 
   return result
+}
+
+// ── Velocity Pattern Detection ──────────────────────────────────────
+
+function checkVelocityPatterns(reviews) {
+  var flags = []
+
+  // Group by calendar day
+  var byDay = {}
+  for (var i = 0; i < reviews.length; i++) {
+    var day = new Date(reviews[i].timestamp).toDateString()
+    if (!byDay[day]) byDay[day] = []
+    byDay[day].push(reviews[i])
+  }
+
+  // Flag: 3+ reviews on the same day targeting one site
+  var days = Object.keys(byDay)
+  for (var j = 0; j < days.length; j++) {
+    var dayReviews = byDay[days[j]]
+    if (dayReviews.length >= 3) {
+      var sites = {}
+      for (var k = 0; k < dayReviews.length; k++) {
+        sites[dayReviews[k].siteKey] = true
+      }
+      if (Object.keys(sites).length === 1) {
+        flags.push('same_day_same_site')
+      }
+    }
+  }
+
+  // Flag: all verification reviews compressed into fewer than 3 days
+  if (days.length < 3 && reviews.length >= 3) {
+    flags.push('compressed_verification')
+  }
+
+  return flags
 }
 
 /**
@@ -164,8 +208,8 @@ function score(el) {
   var result = instance.score()
   if (!result) return null
 
-  // Record this review and apply verification threshold
-  recordReview()
+  // Record this review (only counts if it has text signal) and apply threshold
+  recordReview(result)
   result = applyVerification(result)
 
   // Generate session token for server-side verification
@@ -246,4 +290,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.getVerificationStatus = getVerificationStatus
   module.exports.recordReview = recordReview
   module.exports.applyVerification = applyVerification
+  module.exports.hasTextSignal = hasTextSignal
+  module.exports.checkVelocityPatterns = checkVelocityPatterns
 }
