@@ -41,3 +41,21 @@ Priority: after attestation server, after first real WGH reviews, not before.
 A bot that fakes the text box still has to fake the slider drag and scroll pattern — consistently, over months. The time wall gets harder to climb when the signals extend beyond typing. Session haptics is the answer to slider-only bot mitigation long-term.
 
 ---
+
+# PARKED: ESSAY MODE (EssayMode)
+
+Date added: 2026-03-07
+Status: **Not built. Parked.**
+
+Long-form writing mode with writing ledger, checkpoints, and replay. Currently exists as extension-only (`writer.js`). Future: standalone EssayMode component for education/essay verification use case.
+
+---
+
+# PARKED: HALL EFFECT KEYBOARD SUPPORT (WebHID)
+
+Date added: 2026-03-07
+Status: **Not built. Parked.**
+
+Analog keyboards (Wooting, etc.) provide continuous key travel depth via WebHID API. Pressure curves are unique per-user biometric signal. `wooting-analog.js` exists as prototype in extension. Future: integrate as supplementary WAR signal if analog keyboards reach meaningful market share.
+
+---
