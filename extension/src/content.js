@@ -12,6 +12,8 @@
  */
 
 const ANCHOR_PREFIX = "#jitter:";
+const ATTEST_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/attest";
+const VERIFY_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/verify";
 const currentURL = window.location.href.split('?')[0];
 const isIframe = (window !== window.top);
 
@@ -231,7 +233,7 @@ function bindButtons(s) {
     });
 }
 function setupUI(){if(document.getElementById('jitter-shield'))return;const s=document.createElement('div');s.id='jitter-shield';s.className='jitter-passive';s.innerHTML='⚡';const m=document.createElement('div');m.id='jitter-menu';m.style.display='none';document.body.append(s,m);const st=document.createElement('style');st.textContent=`#jitter-shield{position:fixed;bottom:20px;right:20px;background:#000;color:#444;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:2147483647;box-shadow:0 0 10px rgba(0,0,0,0.5);border:2px solid #333;transition:all 0.2s ease;user-select:none}#jitter-shield:hover{transform:scale(1.1);color:#fff;border-color:#fff;box-shadow:0 0 20px #ffffff66}#jitter-shield.jitter-active{border-color:#00F0FF!important;color:#00F0FF!important;box-shadow:0 0 15px #00F0FF66!important}#jitter-menu{position:fixed;bottom:75px;right:20px;background:#050505;color:#fff;border-radius:4px;font-family:'Courier New',monospace;z-index:2147483647;box-shadow:0 0 30px rgba(0,0,0,0.8);border:1px solid #333;width:240px;overflow:hidden}.jitter-header{padding:15px;background:#111;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between}.jitter-body{padding:15px}.jitter-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#aaa}.jitter-val{color:#fff;font-weight:600}.jitter-btn{background:#111;color:#fff;text-align:center;padding:12px;border-radius:2px;cursor:pointer;margin-top:12px;font-weight:600;font-size:12px;transition:all 0.1s ease;border:1px solid #333;letter-spacing:1px;user-select:none}.jitter-btn:hover{background:#222;border-color:#fff;color:#fff;box-shadow:0 0 10px rgba(255,255,255,0.2)}.jitter-btn.primary{background:#00F0FF11;color:#00F0FF;border-color:#00F0FF44}#btn-open-writer{margin-top:15px;border:1px solid #666;color:#ccc;background:#1a1a1a;box-shadow:0 0 5px rgba(0,0,0,0.5)}#btn-open-writer:hover{border-color:#00F0FF;color:#00F0FF;background:#00F0FF11;box-shadow:0 0 15px #00F0FF66;text-shadow:0 0 5px #00F0FF}`;document.head.appendChild(st);s.addEventListener('click',()=>{const x=document.getElementById('jitter-menu');x.style.display=(x.style.display==='none')?'block':'none';updateUI()})}
-document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
+document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(VERIFY_URL)){return}if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
 function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clearTimeout(scannerTimer);scannerTimer=setTimeout(scanLinks,500)}).observe(document.body,{childList:true,subtree:true})}
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
 function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;const warLine=d.war!=null?`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">WAR: ${d.war} (${d.war_tier||'—'})</div>`:`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${warLine}`;document.body.appendChild(h)}catch(e){}}
@@ -377,14 +379,44 @@ async function copyBadge(s, a) {
 
     const b = btoa(JSON.stringify(p));
     const id = b.slice(-6).toUpperCase();
-    const u = `${ANCHOR_PREFIX}${b}`;
-    const h = `<a href="${u}" style="text-decoration:none;" data-jitter-payload="${b}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${id}</span></a>`;
-    const t = `[JITTER: 0x${id} | INT:${integrity}%]`;
 
     // Store badge hash for chain
     if (typeof CryptoUtils !== 'undefined') {
         await CryptoUtils.storeBadgeHash(b);
     }
+
+    // Get user_id from storage for attestation
+    let userId = 'anon';
+    try {
+        const stored = await new Promise(r => chrome.storage.local.get('jitter_user_id', r));
+        if (stored.jitter_user_id) userId = stored.jitter_user_id;
+    } catch (e) {}
+
+    // POST to attestation server — never blocks badge copy
+    let verifyHref = `${ANCHOR_PREFIX}${b}`;
+    try {
+        const attestRes = await fetch(ATTEST_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                site_key: 'extension',
+                war_score: p.war || 0,
+                classification: p.war >= 0.80 ? 'verified' : p.war >= 0.50 ? 'suspicious' : 'bot',
+                flags: p.war_flags || [],
+                meta: { integrity: p.integrity, keys: p.keys, pastes: p.pastes, sessions: p.sessions },
+            })
+        });
+        const attestData = await attestRes.json();
+        if (attestData.badge_hash) {
+            verifyHref = `${VERIFY_URL}?hash=${attestData.badge_hash}`;
+        }
+    } catch (e) {
+        // Attestation failed silently — use fallback anchor
+    }
+
+    const h = `<a href="${verifyHref}" style="text-decoration:none;" data-jitter-payload="${b}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${id}</span></a>`;
+    const t = `[JITTER: 0x${id} | INT:${integrity}%]`;
 
     navigator.clipboard.write([new ClipboardItem({
         'text/html': new Blob([h], {type: 'text/html'}),
