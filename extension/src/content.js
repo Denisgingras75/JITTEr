@@ -192,15 +192,15 @@ function updateUI() {
                 const loki = JitterBio.analyzeLoki(bioSession);
                 const profile = JitterBio.getProfile(bioSession);
                 const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
-                const warDisplay = warResult ? warResult.raw_war : '—';
+                const warDisplay = warResult ? warResult.war : '—';
                 const tierDisplay = warResult ? warResult.tier : '—';
-                const warColor = warResult && warResult.raw_war >= 0.60 ? '#00F0FF' : warResult && warResult.raw_war >= 0.40 ? '#FFD700' : '#FF0055';
+                const warColor = warResult && warResult.war >= 0.60 ? '#00F0FF' : warResult && warResult.war >= 0.40 ? '#FFD700' : '#FF0055';
                 return `
                 <div class="jitter-section-title">WAR SCORE</div>
                 <div class="jitter-row"><span>WAR</span><span class="jitter-val" style="color:${warColor};font-size:16px">${warDisplay}</span></div>
                 <div class="jitter-row"><span>Tier</span><span class="jitter-val" style="color:${warColor}">${tierDisplay}</span></div>
                 <div style="width:100%; background:#222; height:4px; border-radius:2px; overflow:hidden; margin-bottom:10px;">
-                    <div style="width:${warResult ? warResult.raw_war * 100 : 0}%; background:${warColor}; height:100%;"></div>
+                    <div style="width:${warResult ? warResult.war * 100 : 0}%; background:${warColor}; height:100%;"></div>
                 </div>
                 <div class="jitter-section-title">SIGNALS</div>
                 <div class="jitter-row"><span>Entropy</span><span class="jitter-val">${loki.entropy}</span></div>
