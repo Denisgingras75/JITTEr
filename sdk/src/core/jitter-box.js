@@ -311,6 +311,12 @@ function scoreProfile(profile, captureData) {
 
   var war = round2(Math.max(0, raw_war - penalty))
 
+  // Purity multiplier — paste ratio directly scales WAR down
+  if (total > 0 && pasteRatio > 0.10) {
+    var purityMult = Math.max(0, 1 - pasteRatio)
+    war = round2(war * purityMult)
+  }
+
   var classification
   if (war >= 0.80) classification = 'verified'
   else if (war >= 0.50) classification = 'suspicious'

@@ -556,6 +556,13 @@ function scoreWAR(session, profile) {
   }
 
   let war = round2(Math.max(0, raw_war - penalty));
+
+  // Purity multiplier — paste ratio directly scales WAR down
+  if (total > 0 && pasteRatio > 0.10) {
+    var purityMult = Math.max(0, 1 - pasteRatio);
+    war = round2(war * purityMult);
+  }
+
   const tier = WAR_TIERS.find(([min]) => war >= min)[1];
 
   return { war, raw_war, tier, components, flags, timeCap: 1.0 };
