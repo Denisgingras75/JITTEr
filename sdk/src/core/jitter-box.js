@@ -48,10 +48,12 @@ var RAMPS = {
   pause_freq:       [0.4, 1.5],
   purity:           [0, 1],
   ks_shape:         [0.25, 0.08],
+  dwell_uniformity: [0.09, 0.25],
 }
 var WEIGHTS = {
-  bigram_rhythm: 0.18, per_key: 0.15, cross_signal: 0.15, distribution: 0.12,
-  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.07, purity: 0.05,
+  bigram_rhythm: 0.18, per_key: 0.15, cross_signal: 0.15, distribution_shape: 0.12,
+  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.05,
+  dwell_uniformity: 0.04, purity: 0.03,
 }
 
 // ── Math helpers ───────────────────────────────────────────────────────
@@ -171,10 +173,25 @@ function computeMousePath(positions) {
 function scoreProfile(profile, captureData) {
   if (!profile) return { war: 1.0, classification: 'verified', components: {}, flags: [] }
 
-  var components = {}
   var flags = []
 
-  // 1. Bigram rhythm (CV of bigram means)
+  // === LAYER 1: Hard floors — instant WAR = 0 ===
+  var hasHardFloor =
+    (profile.mean_dwell != null && profile.mean_dwell < 27) ||
+    (profile.std_inter_key != null && profile.std_inter_key < 9) ||
+    (profile.mean_inter_key != null && profile.mean_inter_key < 54)
+
+  if (hasHardFloor) {
+    if (profile.mean_dwell != null && profile.mean_dwell < 27) flags.push('dwell_floor')
+    if (profile.std_inter_key != null && profile.std_inter_key < 9) flags.push('variance_floor')
+    if (profile.mean_inter_key != null && profile.mean_inter_key < 54) flags.push('iki_floor')
+    return { war: 0, classification: 'bot', components: {}, flags: flags }
+  }
+
+  // === LAYER 3: Weighted signals ===
+  var components = {}
+
+  // 1. Bigram rhythm
   var sigs = profile.bigram_signatures || {}
   var bigramKeys = Object.keys(sigs)
   if (bigramKeys.length >= 4) {
@@ -188,7 +205,7 @@ function scoreProfile(profile, captureData) {
     components.bigram_rhythm = 0.5
   }
 
-  // 2. Per-key uniqueness (CV of per-key dwells)
+  // 2. Per-key uniqueness
   var perKeyValues = []
   var pkd = profile.per_key_dwell || {}
   var pkKeys = Object.keys(pkd)
@@ -202,10 +219,10 @@ function scoreProfile(profile, captureData) {
     components.per_key = 0.5
   }
 
-  // 3. Cross-signal correlation (3 sub-tests)
+  // 3. Cross-signal
   components.cross_signal = scoreCrossSignal(captureData || {})
 
-  // 4. Distribution shape (K-S test on flight times)
+  // 4. Distribution shape (K-S test)
   if (captureData && captureData.flightTimes && captureData.flightTimes.length >= 10) {
     var ks = ksStatistic(captureData.flightTimes)
     components.distribution_shape = rampScore(ks, RAMPS.ks_shape[0], RAMPS.ks_shape[1])
@@ -217,7 +234,6 @@ function scoreProfile(profile, captureData) {
   // 5. Inter-key variance
   if (profile.std_inter_key != null) {
     components.inter_key_var = rampScore(profile.std_inter_key, RAMPS.inter_key_var[0], RAMPS.inter_key_var[1])
-    if (profile.std_inter_key < 9) flags.push('variance_floor')
   } else {
     components.inter_key_var = 0.5
   }
@@ -233,12 +249,11 @@ function scoreProfile(profile, captureData) {
   // 7. Mean dwell
   if (profile.mean_dwell != null) {
     components.mean_dwell = rampScore(profile.mean_dwell, RAMPS.mean_dwell[0], RAMPS.mean_dwell[1])
-    if (profile.mean_dwell < 27) flags.push('dwell_floor')
   } else {
     components.mean_dwell = 0.5
   }
 
-  // 8. Editing behavior (avg of edit_ratio + pause_freq sub-scores)
+  // 8. Editing behavior
   var editSub = profile.edit_ratio != null
     ? rampScore(profile.edit_ratio, RAMPS.edit_ratio[0], RAMPS.edit_ratio[1]) : 0.5
   var pauseSub = profile.pause_freq != null
@@ -249,7 +264,16 @@ function scoreProfile(profile, captureData) {
     flags.push('no_editing_behavior')
   }
 
-  // 9. Purity
+  // 9. Dwell uniformity (NEW — 10th signal)
+  if (perKeyValues.length >= 3) {
+    var duMean = mean(perKeyValues)
+    var duCv = duMean > 0 ? std(perKeyValues) / duMean : 0
+    components.dwell_uniformity = rampScore(duCv, RAMPS.dwell_uniformity[0], RAMPS.dwell_uniformity[1])
+  } else {
+    components.dwell_uniformity = 0.5
+  }
+
+  // 10. Purity
   var total = (captureData && (captureData.humanChars + captureData.alienChars)) || 0
   if (total >= MIN_CHARS_FOR_SCORE && captureData) {
     components.purity = rampScore(captureData.humanChars / total, RAMPS.purity[0], RAMPS.purity[1])
@@ -257,22 +281,37 @@ function scoreProfile(profile, captureData) {
     components.purity = 0.5
   }
 
-  // Weighted sum
-  var war = 0
+  // Weighted sum (no workaround needed — keys match component names)
+  var raw_war = 0
   var weightKeys = Object.keys(WEIGHTS)
   for (var w = 0; w < weightKeys.length; w++) {
     var wk = weightKeys[w]
-    var comp = wk === 'distribution' ? 'distribution_shape' : wk
-    war += WEIGHTS[wk] * (components[comp] != null ? components[comp] : 0.5)
+    raw_war += WEIGHTS[wk] * (components[wk] != null ? components[wk] : 0.5)
   }
-  war = round2(war)
+  raw_war = round2(raw_war)
+
+  // === LAYER 2: Soft penalties ===
+  var PENALTIES = {
+    bigram_uniform: 0.08,
+    per_key_uniformity: 0.08,
+    dwell_std_hard: 0.06,
+    no_editing_behavior: 0.05,
+    non_lognormal: 0.05,
+  }
+
+  var penalty = 0
+  for (var p = 0; p < flags.length; p++) {
+    if (PENALTIES[flags[p]]) penalty += PENALTIES[flags[p]]
+  }
+
+  var war = round2(Math.max(0, raw_war - penalty))
 
   var classification
   if (war >= 0.80) classification = 'verified'
   else if (war >= 0.50) classification = 'suspicious'
   else classification = 'bot'
 
-  return { war: war, classification: classification, components: components, flags: flags }
+  return { war: war, raw_war: raw_war, classification: classification, components: components, flags: flags }
 }
 
 // Cross-signal correlation scorer (3 sub-tests)
