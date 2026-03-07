@@ -13,13 +13,13 @@
     "default_title": "Open Jitter Writer"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "all_frames": true,
-      "js": ["crypto-utils.js", "passport-utils.js", "biometrics.js", "content.js"],
+      "js": ["src/crypto-utils.js", "src/passport-utils.js", "src/biometrics.js", "src/content.js"],
       "run_at": "document_idle"
     }
   ]
