@@ -109,12 +109,14 @@ function updatePassportLevel() {
 
 // --- UTILS ---
 window.addEventListener('paste', (e) => {
-    if (!project.isActive) return;
     const pastedText = e.clipboardData?.getData('text') || '';
     if (pastedText.length > 0) {
+        // Always track paste in bio session (WAR purity signal)
         JitterBio.handlePaste(bioSession, pastedText.length);
-        project.pasteCount++;
-        project.pastedChars = (project.pastedChars || 0) + pastedText.length;
+        if (project.isActive) {
+            project.pasteCount++;
+            project.pastedChars = (project.pastedChars || 0) + pastedText.length;
+        }
     }
     saveData();
     if(!isIframe) updateUI();
