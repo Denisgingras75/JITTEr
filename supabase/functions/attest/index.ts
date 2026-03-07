@@ -57,8 +57,45 @@ serve(async (req) => {
       )
     }
 
+    // Upsert user profile with aggregated stats
+    const m = meta || {}
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('total_badges, avg_war, best_war, sites_used, total_keystrokes, total_paste_chars, total_human_chars, total_focus_ms')
+      .eq('user_id', user_id)
+      .single()
+
+    const badges = (existing?.total_badges || 0) + 1
+    const prevAvg = existing?.avg_war || 0
+    const newAvg = Math.round(((prevAvg * (badges - 1) + war_score) / badges) * 100) / 100
+    const bestWar = Math.max(existing?.best_war || 0, war_score)
+    const sites = existing?.sites_used || []
+    if (!sites.includes(site_key)) sites.push(site_key)
+
+    const level = badges >= 50 ? 'Master'
+      : badges >= 20 ? 'Expert'
+      : badges >= 10 ? 'Advanced'
+      : badges >= 5 ? 'Intermediate'
+      : badges >= 2 ? 'Beginner'
+      : 'Novice'
+
+    await supabase.from('profiles').upsert({
+      user_id,
+      total_badges: badges,
+      avg_war: newAvg,
+      best_war: bestWar,
+      level,
+      last_seen: timestamp,
+      sites_used: sites,
+      total_keystrokes: (existing?.total_keystrokes || 0) + (m.keys || 0),
+      total_paste_chars: (existing?.total_paste_chars || 0) + (m.paste_chars || 0),
+      total_human_chars: (existing?.total_human_chars || 0) + (m.keys || 0),
+      total_focus_ms: (existing?.total_focus_ms || 0) + (m.focus_ms || 0),
+      total_sessions: badges,
+    }, { onConflict: 'user_id' })
+
     return new Response(
-      JSON.stringify({ badge_hash, timestamp, classification }),
+      JSON.stringify({ badge_hash, timestamp, classification, profile: { badges, avg_war: newAvg, best_war: bestWar, level } }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

@@ -6,7 +6,7 @@ serve(async (req) => {
   const badge_hash = url.searchParams.get('hash')
 
   if (!badge_hash) {
-    return new Response(renderPage(null, 'No badge hash provided'), {
+    return new Response(renderPage(null, null, 'No badge hash provided'), {
       headers: { 'Content-Type': 'text/html' }
     })
   }
@@ -18,22 +18,28 @@ serve(async (req) => {
 
   const { data, error } = await supabase
     .from('attestations')
-    .select('war_score, classification, flags, site_key, created_at')
+    .select('war_score, classification, flags, site_key, created_at, user_id')
     .eq('badge_hash', badge_hash)
     .single()
 
   if (error || !data) {
-    return new Response(renderPage(null, 'Badge not found'), {
+    return new Response(renderPage(null, null, 'Badge not found'), {
       headers: { 'Content-Type': 'text/html' }
     })
   }
 
-  return new Response(renderPage(data, null), {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('total_badges, avg_war, best_war, level, first_seen, sites_used, total_keystrokes')
+    .eq('user_id', data.user_id)
+    .single()
+
+  return new Response(renderPage(data, profile, null), {
     headers: { 'Content-Type': 'text/html' }
   })
 })
 
-function renderPage(data: any, errorMsg: string | null): string {
+function renderPage(data: any, profile: any, errorMsg: string | null): string {
   if (errorMsg) {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JITTEr</title></head>
 <body style="font-family:-apple-system,sans-serif;max-width:480px;margin:60px auto;padding:20px;color:#111">
@@ -53,6 +59,24 @@ function renderPage(data: any, errorMsg: string | null): string {
   const date = new Date(data.created_at).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric'
   })
+
+  const formatKeys = (k: number) => k >= 1000000 ? (k/1000000).toFixed(1) + 'M' : k >= 1000 ? (k/1000).toFixed(1) + 'K' : String(k)
+
+  const memberSince = profile?.first_seen
+    ? new Date(profile.first_seen).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+    : null
+
+  const profileSection = profile ? `
+  <div style="margin-top:32px;padding-top:24px;border-top:2px solid #eee">
+    <h3 style="font-size:14px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Author Profile</h3>
+    <div class="stat"><span class="label">Level</span><strong>${profile.level}</strong></div>
+    <div class="stat"><span class="label">Badges Minted</span><strong>${profile.total_badges}</strong></div>
+    <div class="stat"><span class="label">Avg WAR</span><strong>${profile.avg_war}</strong></div>
+    <div class="stat"><span class="label">Best WAR</span><strong>${profile.best_war}</strong></div>
+    <div class="stat"><span class="label">Total Keystrokes</span><strong>${formatKeys(profile.total_keystrokes || 0)}</strong></div>
+    <div class="stat"><span class="label">Platforms</span><strong>${(profile.sites_used || []).join(', ').toUpperCase() || '—'}</strong></div>
+    ${memberSince ? `<div class="stat"><span class="label">Member Since</span><strong>${memberSince}</strong></div>` : ''}
+  </div>` : ''
 
   return `<!DOCTYPE html>
 <html>
@@ -79,6 +103,7 @@ function renderPage(data: any, errorMsg: string | null): string {
     <div class="stat"><span class="label">Attested</span><strong>${date}</strong></div>
     ${data.flags.length > 0 ? `<div class="stat"><span class="label">Flags</span><strong>${data.flags.join(', ')}</strong></div>` : ''}
   </div>
+  ${profileSection}
   <p class="footer">
     WAR (Writing Authenticity Rating) measures keystroke dynamics.<br>
     Raw keystrokes never leave the device. Only aggregated timing stats are attested.<br><br>
