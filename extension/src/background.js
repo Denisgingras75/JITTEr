@@ -54,42 +54,22 @@ async function signInWithGoogle() {
       });
     });
 
-    // Exchange Google token for Supabase session
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=id_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        provider: 'google',
-        token: token,
-      }),
+    // Get user's email from Chrome profile
+    const userInfo = await new Promise((resolve) => {
+      chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, resolve);
     });
+    const email = userInfo.email || null;
 
-    if (!res.ok) {
-      // Fallback: use token as identity without Supabase session
-      const hash = await hashString(token);
-      await chrome.storage.local.set({
-        jitter_user_id: hash,
-        jitter_user_email: null,
-        jitter_auth_method: 'token_hash',
-      });
-      return { ok: true, user_id: hash, method: 'token_hash' };
-    }
-
-    const data = await res.json();
-    const userId = data.user?.id || await hashString(token);
-    const email = data.user?.email || null;
+    // Generate stable user ID from email or token
+    const userId = email ? await hashString(email) : await hashString(token);
 
     await chrome.storage.local.set({
       jitter_user_id: userId,
       jitter_user_email: email,
-      jitter_auth_method: 'supabase',
-      jitter_access_token: data.access_token,
+      jitter_auth_method: 'chrome_identity',
     });
 
-    return { ok: true, user_id: userId, email: email, method: 'supabase' };
+    return { ok: true, user_id: userId, email: email, method: 'chrome_identity' };
   } catch (e) {
     return { ok: false, error: e.message };
   }
