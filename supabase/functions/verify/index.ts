@@ -4,8 +4,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 serve(async (req) => {
   const url = new URL(req.url)
   const badge_hash = url.searchParams.get('hash')
+  const wantJson = url.searchParams.get('format') === 'json' ||
+    (req.headers.get('Accept') || '').includes('application/json')
 
   if (!badge_hash) {
+    if (wantJson) {
+      return new Response(
+        JSON.stringify({ valid: false, error: 'No badge hash provided' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      )
+    }
     return new Response(renderPage(null, null, 'No badge hash provided'), {
       headers: { 'Content-Type': 'text/html' }
     })
@@ -23,9 +31,29 @@ serve(async (req) => {
     .single()
 
   if (error || !data) {
+    if (wantJson) {
+      return new Response(
+        JSON.stringify({ valid: false, error: 'Badge not found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      )
+    }
     return new Response(renderPage(null, null, 'Badge not found'), {
       headers: { 'Content-Type': 'text/html' }
     })
+  }
+
+  if (wantJson) {
+    return new Response(
+      JSON.stringify({
+        valid: true,
+        war_score: data.war_score,
+        classification: data.classification,
+        flags: data.flags,
+        site_key: data.site_key,
+        created_at: data.created_at,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+    )
   }
 
   const { data: profile } = await supabase
