@@ -5,53 +5,63 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // JITTEr verification page — HARDENED for score secrecy
 //
 // What changed: the raw WAR score, avg_war, and best_war are NO LONGER rendered.
-// The public page shows the human-readable classification (Verified / Unverified
-// / Suspicious), the passport maturity, and provenance metadata — but never the
-// number an attacker would use as an oracle to tune an evasion against the
-// detector. This is architecture rule #1 ("scores never leave the system")
-// applied to the one surface that was leaking it.
+// The public page shows the human-readable classification (Verified / Building
+// Trust / Unverified / Suspicious), the passport maturity, and provenance
+// metadata — but never the number an attacker would use as an oracle to tune an
+// evasion against the detector. This is architecture rule #1 ("scores never
+// leave the system") applied to the one surface that was leaking it.
 //
-// Data source: the `public_badge` VIEW (see 20260611000001_harden_rls.sql), not
-// the base tables. The RLS migration revokes anon access to attestations/profiles
-// and exposes ONLY this view to anon — which by construction omits war_score /
-// avg_war / best_war / flags. Score secrecy is enforced at the database boundary,
-// so even this page literally cannot read the number. The classification column
-// is sufficient to derive the public label.
+// Data access: this function reads the `public_badge` VIEW (defined in
+// 20260611000001_harden_rls.sql) with the SERVICE ROLE key. The anon key has
+// ZERO grants — not on the base tables, not on the view — so the PostgREST
+// surface is completely closed: no score oracle, no bulk enumeration of the
+// badge ledger. The only public read path is this page, one badge hash at a
+// time, rendering only what the view exposes (which by construction omits
+// war_score / avg_war / best_war / flags / user_id).
 // ─────────────────────────────────────────────────────────────────────────────
+
+const HTML_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+}
+
+// All DB-sourced strings pass through this before hitting the HTML. The values
+// are server-written today; escape anyway so a future write path can't turn
+// this page into stored XSS.
+const esc = (v: unknown): string => String(v ?? '').replace(/[&<>"']/g, (ch) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!
+))
 
 serve(async (req) => {
   const url = new URL(req.url)
   const badge_hash = url.searchParams.get('hash')
-  if (!badge_hash) {
-    return new Response(renderPage(null, null, 'No badge hash provided'),
-      { headers: { 'Content-Type': 'text/html' } })
+  if (!badge_hash || badge_hash.length > 256) {
+    return new Response(renderPage(null, null, 'No badge hash provided'), { headers: HTML_HEADERS })
   }
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   )
 
-  // Read from the public_badge view only. It exposes the verdict + provenance
-  // (classification, site_key, created_at) and the passport stats (level,
-  // total_badges, total_keystrokes, first_seen, sites_used) — and nothing else.
+  // public_badge is the single source of public-safe columns. No score fields
+  // exist in it, so this page literally cannot leak them.
   const { data: row, error } = await supabase
     .from('public_badge')
     .select('classification, site_key, created_at, level, total_badges, total_keystrokes, first_seen, sites_used')
     .eq('badge_hash', badge_hash).single()
 
   if (error || !row) {
-    return new Response(renderPage(null, null, 'Badge not found'),
-      { headers: { 'Content-Type': 'text/html' } })
+    return new Response(renderPage(null, null, 'Badge not found'), { headers: HTML_HEADERS })
   }
 
-  // The view is flat (attestation LEFT JOIN profile). Split it back into the two
-  // logical halves renderPage expects. There is no war_score field to pass.
+  // The view is flat (attestation LEFT JOIN profile) — split it back into the
+  // two logical halves the renderer expects.
   const data = {
     classification: row.classification,
     site_key: row.site_key,
     created_at: row.created_at,
-    war_score: undefined as number | undefined,
   }
   const profile = row.level != null || row.total_badges != null ? {
     level: row.level,
@@ -61,16 +71,15 @@ serve(async (req) => {
     sites_used: row.sites_used,
   } : null
 
-  return new Response(renderPage(data, profile, null),
-    { headers: { 'Content-Type': 'text/html' } })
+  return new Response(renderPage(data, profile, null), { headers: HTML_HEADERS })
 })
 
-function labelFor(classification: string, war: number | undefined): { label: string; color: string } {
-  // Derive the public label from classification first; fall back to score bands.
-  // In the hardened path `war` is undefined (the view never exposes it), so the
-  // classification branches are what actually decide the label.
-  if (classification === 'verified' || (war != null && war >= 0.80)) return { label: 'Verified Human', color: '#00BA7C' }
-  if (classification === 'bot' || (war != null && war < 0.50)) return { label: 'Suspicious', color: '#EF4444' }
+// Public label derives from classification ONLY — there is no score to fall
+// back on, by design. Unknown values render as the cautious middle state.
+function labelFor(classification: string): { label: string; color: string } {
+  if (classification === 'verified') return { label: 'Verified Human', color: '#00BA7C' }
+  if (classification === 'building') return { label: 'Building Trust', color: '#6B7280' }
+  if (classification === 'bot') return { label: 'Suspicious', color: '#EF4444' }
   return { label: 'Unverified', color: '#F59E0B' }
 }
 
@@ -78,10 +87,10 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   if (errorMsg) {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JITTEr</title></head>
 <body style="font-family:-apple-system,sans-serif;max-width:480px;margin:60px auto;padding:20px;color:#111">
-<h2>JITTEr Badge Verification</h2><p style="color:#EF4444">${errorMsg}</p></body></html>`
+<h2>JITTEr Badge Verification</h2><p style="color:#EF4444">${esc(errorMsg)}</p></body></html>`
   }
 
-  const { label, color } = labelFor(data.classification, data.war_score)
+  const { label, color } = labelFor(data.classification)
   const date = new Date(data.created_at).toLocaleDateString('en-US',
     { year: 'numeric', month: 'long', day: 'numeric' })
   const memberSince = profile?.first_seen
@@ -92,11 +101,11 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   const profileSection = profile ? `
   <div style="margin-top:32px;padding-top:24px;border-top:2px solid #eee">
     <h3 style="font-size:14px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Author Passport</h3>
-    <div class="stat"><span class="label">Standing</span><strong>${profile.level}</strong></div>
-    <div class="stat"><span class="label">Verified Contributions</span><strong>${profile.total_badges}</strong></div>
-    <div class="stat"><span class="label">Total Keystrokes</span><strong>${fmtK(profile.total_keystrokes || 0)}</strong></div>
-    <div class="stat"><span class="label">Platforms</span><strong>${(profile.sites_used || []).join(', ').toUpperCase() || '—'}</strong></div>
-    ${memberSince ? `<div class="stat"><span class="label">Member Since</span><strong>${memberSince}</strong></div>` : ''}
+    <div class="stat"><span class="label">Standing</span><strong>${esc(profile.level)}</strong></div>
+    <div class="stat"><span class="label">Verified Contributions</span><strong>${esc(profile.total_badges)}</strong></div>
+    <div class="stat"><span class="label">Total Keystrokes</span><strong>${esc(fmtK(profile.total_keystrokes || 0))}</strong></div>
+    <div class="stat"><span class="label">Platforms</span><strong>${esc((profile.sites_used || []).join(', ').toUpperCase() || '—')}</strong></div>
+    ${memberSince ? `<div class="stat"><span class="label">Member Since</span><strong>${esc(memberSince)}</strong></div>` : ''}
   </div>` : ''
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -113,8 +122,8 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   <p><span class="badge"><span class="dot"></span>${label}</span></p>
   <div style="margin-top:24px">
     <div class="stat"><span class="label">Status</span><strong>${label}</strong></div>
-    <div class="stat"><span class="label">Platform</span><strong>${data.site_key.toUpperCase()}</strong></div>
-    <div class="stat"><span class="label">Attested</span><strong>${date}</strong></div>
+    <div class="stat"><span class="label">Platform</span><strong>${esc(String(data.site_key).toUpperCase())}</strong></div>
+    <div class="stat"><span class="label">Attested</span><strong>${esc(date)}</strong></div>
   </div>
   ${profileSection}
   <p class="footer">

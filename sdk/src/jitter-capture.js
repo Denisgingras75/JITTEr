@@ -331,8 +331,12 @@
           result.verifyUrl = config.verifyUrlBase + '?hash=' + data.badge_hash
         }
         // Re-render the badge from the SERVER classification, not the local score,
-        // so the visible badge matches the authoritative verdict.
-        result.badge = buildBadgeFromClassification(data.classification)
+        // so the visible badge matches the authoritative verdict. Only when the
+        // server actually returned a verdict we know how to render — an error
+        // body or insufficient_data must not clobber the local badge.
+        if (data.classification && BADGE_LABELS[data.classification]) {
+          result.badge = buildBadgeFromClassification(data.classification)
+        }
         return result
       })
       .catch(function() {
@@ -341,17 +345,18 @@
       })
   }
 
+  var BADGE_LABELS = {
+    verified:   ['#00BA7C', 'Verified Human'],
+    suspicious: ['#F59E0B', 'Unverified'],
+    bot:        ['#EF4444', 'Suspicious'],
+    building:   ['#6B7280', 'Building Trust'],
+  }
+
   // Badge built from classification label only — no score in the DOM.
   function buildBadgeFromClassification(classification) {
     var host = document.createElement('span')
     var shadow = host.attachShadow({ mode: 'closed' })
-    var map = {
-      verified:   ['#00BA7C', 'Verified Human'],
-      suspicious: ['#F59E0B', 'Unverified'],
-      bot:        ['#EF4444', 'Suspicious'],
-      building:   ['#6B7280', 'Building Trust'],
-    }
-    var pair = map[classification] || map.suspicious
+    var pair = BADGE_LABELS[classification] || BADGE_LABELS.suspicious
     var color = pair[0], label = pair[1]
     shadow.innerHTML =
       '<style>.badge{display:inline-flex;align-items:center;gap:5px;background:' + color +

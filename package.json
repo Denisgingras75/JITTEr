@@ -8,6 +8,9 @@
   },
   "scripts": {
     "test": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test",
+    "test:unit": "node tests/forge-rejection.test.mjs && node tests/scorer-parity.test.mjs",
+    "test:forge": "node tests/forge-rejection.test.mjs",
+    "test:parity": "node tests/scorer-parity.test.mjs",
     "test:student": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/student-essay.spec.js",
     "test:teacher": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/teacher-verify.spec.js",
     "test:chain": "PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright npx playwright test tests/badge-chain.spec.js",
