@@ -9,11 +9,17 @@
  *   <script src="jitter-capture.js"></script>
  *
  * Setup (optional attestation):
- *   JitterCapture.init({ siteKey: 'wgh', attestUrl: 'https://xxx.supabase.co/functions/v1/attest' });
+ *   JitterCapture.init({
+ *     siteKey: 'wgh',
+ *     attestProxyUrl: 'https://wgh.app/api/jitter-attest', // site backend, holds secret + signs
+ *     verifyUrlBase:  'https://xxx.supabase.co/functions/v1/verify',
+ *   });
  *
  * On submit:
  *   var result = await JitterCapture.scoreAndAttest('review-text', userId);
  *   // result = { war, classification, flags, badge, meta, badge_hash, verifyUrl }
+ *   // NOTE: result.war is LOCAL ONLY (live UI). The server scores authoritatively
+ *   //       from the raw capture; the numeric score is never sent or returned.
  */
 
 ;(function(global) {
@@ -184,6 +190,10 @@
       flags: result.flags,
       badge: buildBadge(result),
       meta: buildMeta(s),
+      // Raw timing arrays travel with the result so scoreAndAttest can POST them
+      // to the signing proxy. The server re-scores authoritatively; result.war
+      // above is LOCAL ONLY (live UI feedback) and is never sent.
+      captureData: captureData,
     }
   }
 
@@ -267,44 +277,90 @@
 
   // --- Config + Attestation ---
 
-  var config = { siteKey: 'wgh', attestUrl: null }
+  // attestProxyUrl points at the SITE'S OWN backend signing proxy (which holds
+  // the per-site secret and forwards to JITTEr's attest endpoint). The site
+  // secret is never shipped in the browser bundle. verifyUrlBase is JITTEr's
+  // public verify function used to build the badge's verification link.
+  var config = { siteKey: 'wgh', attestProxyUrl: null, verifyUrlBase: null }
 
   function init(opts) {
     if (opts.siteKey) config.siteKey = opts.siteKey
-    if (opts.attestUrl) config.attestUrl = opts.attestUrl
+    if (opts.attestProxyUrl) config.attestProxyUrl = opts.attestProxyUrl
+    if (opts.verifyUrlBase) config.verifyUrlBase = opts.verifyUrlBase
   }
 
+  // HARDENED: instead of POSTing a client-computed war_score (forgeable), we POST
+  // the raw capture arrays. The site's backend signs the body (HMAC over the
+  // shared secret) and forwards to JITTEr's attest endpoint, which scores
+  // authoritatively. We never send — or receive — the numeric score.
+  //
+  //   Browser → site backend (/api/jitter-attest, holds secret, signs) → JITTEr attest
+  //
+  // See sdk/site-proxy-reference.js for the signing proxy.
   function scoreAndAttest(elOrId, userId) {
     var result = scoreElement(elOrId)
 
-    if (!config.attestUrl || !userId || result.war == null) {
+    // No attest if we lack what we need. result.war here is LOCAL ONLY — used for
+    // immediate UI feedback (the badge). It is never sent to the server.
+    if (!config.attestProxyUrl || !userId || result.war == null) {
       return Promise.resolve(result)
     }
 
-    return fetch(config.attestUrl, {
+    // Send RAW CAPTURE, not the score. The site's backend signs + forwards.
+    var body = {
+      user_id: userId,
+      capture: result.captureData || {
+        flightTimes: [], dwellTimes: [], humanChars: 0,
+        alienChars: 0, backspaceCount: 0, pauseCount: 0,
+      },
+      meta: result.meta,
+    }
+
+    return fetch(config.attestProxyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: userId,
-        site_key: config.siteKey,
-        war_score: result.war,
-        classification: result.classification,
-        flags: result.flags,
-        meta: result.meta,
+      body: JSON.stringify(body),
+    })
+      .then(function(res) { return res.json() })
+      .then(function(data) {
+        // Server returns classification + hash ONLY. It does not return a score.
+        result.classification = data.classification || result.classification
+        result.badge_hash = data.badge_hash || null
+        result.time_cap = data.time_cap
+        if (data.badge_hash && config.verifyUrlBase) {
+          result.verifyUrl = config.verifyUrlBase + '?hash=' + data.badge_hash
+        }
+        // Re-render the badge from the SERVER classification, not the local score,
+        // so the visible badge matches the authoritative verdict.
+        result.badge = buildBadgeFromClassification(data.classification)
+        return result
       })
-    })
-    .then(function(res) { return res.json() })
-    .then(function(data) {
-      result.badge_hash = data.badge_hash || null
-      if (data.badge_hash && config.attestUrl) {
-        result.verifyUrl = config.attestUrl.replace('/attest', '/verify') + '?hash=' + data.badge_hash
-      }
-      return result
-    })
-    .catch(function() {
-      // Never block — attestation is additive
-      return result
-    })
+      .catch(function() {
+        // Never block — attestation is additive
+        return result
+      })
+  }
+
+  // Badge built from classification label only — no score in the DOM.
+  function buildBadgeFromClassification(classification) {
+    var host = document.createElement('span')
+    var shadow = host.attachShadow({ mode: 'closed' })
+    var map = {
+      verified:   ['#00BA7C', 'Verified Human'],
+      suspicious: ['#F59E0B', 'Unverified'],
+      bot:        ['#EF4444', 'Suspicious'],
+      building:   ['#6B7280', 'Building Trust'],
+    }
+    var pair = map[classification] || map.suspicious
+    var color = pair[0], label = pair[1]
+    shadow.innerHTML =
+      '<style>.badge{display:inline-flex;align-items:center;gap:5px;background:' + color +
+      '18;color:' + color + ';border:1px solid ' + color +
+      ';border-radius:100px;padding:2px 10px;font-size:11px;font-family:sans-serif;font-weight:600}' +
+      '.dot{width:6px;height:6px;border-radius:50%;background:' + color + '}</style>' +
+      '<span class="badge"><span class="dot"></span>' + label + '</span>'
+    // NOTE: no title="WAR: ..." — the score never enters the DOM.
+    return host
   }
 
   global.JitterCapture = {
