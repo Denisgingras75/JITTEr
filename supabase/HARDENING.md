@@ -71,7 +71,33 @@ the site, then removing the old one.
 
 Time-cap semantics (enforced by tests): the cap applies to the **penalized**
 war (paste penalties survive it), limits confidence only (never promotes a
-verdict), and is computed from the DB's `first_seen`, never a client claim.
+verdict), and is computed from the DB's `first_seen`, never a client claim. The
+schedule is the documented **step bands** (not a log curve — see audit below).
+
+## Paste model (Hard Rule #4: transparent, not punished)
+
+Reconciled to the spec after an audit found the engine triple-punished paste
+(penalty + multiplier) against the stated rule. The model now:
+
+- Weights each paste's contribution to "alien" chars by **its own size**
+  (`<50 → 0.1x`, `50–300 → 0.3x`, `>300 → 1.0x`), folded into the **purity**
+  signal (weight 0.03) — small pastes (URL, name) are near-invisible.
+- Flags `high_paste_volume` on multiple pastes — diagnostic, **no penalty**.
+- Keeps exactly **one** hard guard: `paste_flood` (−0.30) when weighted paste
+  exceeds 90% of the effective total. This is the anti-laundering backstop
+  (paste a 5000-char AI essay + type a few words → still caught as `bot`).
+- **Dropped:** the `paste_heavy` (−0.15) penalty and the `war × (1 − ratio)`
+  multiplier that crushed any moderate paste.
+
+Requires per-paste sizes in the capture (`pasteSizes: number[]`), now emitted by
+both the widget and the canonical engine and sanitized server-side. The same
+logic is byte-identical in `scorer.ts` and `jitter-box.js` (parity-fuzzed with
+paste sizes) and ported to the legacy `biometrics.js`.
+
+**Accepted tradeoff:** a sub-flood paste (e.g. 60%) is no longer reduced beyond
+the gentle purity signal — a 60%-pasted review can read as "Verified Human" with
+40% purity shown in the stats. This is the intended "transparent, not punished"
+behavior; the `paste_flood` threshold is the dial if it ever needs tightening.
 
 ## Deviations from the original audit package
 
@@ -106,6 +132,36 @@ The audit package was reviewed before integration; these defects were fixed:
    meta, nonce in the badge hash, non-throwing tier lookup, top-level
    try/catch (no internals leak), HTML escaping + `no-store` on the verify
    page, and the widget no longer clobbers its local badge on attest errors.
+
+## Audit findings (code vs JITTER-PLAN.md theory)
+
+A second audit checked the implementation against the documented theory:
+
+1. **Time cap used a log curve, not the documented step bands.** The curve
+   under-capped by up to 0.23 WAR mid-range (day 30: 0.58 vs spec 0.80),
+   wrongly holding mature-enough authors at `suspicious`. Fixed to the exact
+   bands in both the server scorer and legacy `biometrics.js`; pinned by tests.
+2. **Paste contradicted Hard Rule #4** — fixed to the size-weighted model above.
+3. **Doc drift:** JITTER-PLAN.md's WAR table was the stale 9-signal set;
+   refreshed to the shipped 10-signal weights.
+
+Still open (design calls, not fixed here):
+
+- **Badges are HMAC-authenticated + DB-backed, not ECDSA P-256.** Fine for the
+  online verify flow (trust = "this hash exists in JITTEr's DB with this
+  verdict"). If a portable, self-verifying badge is needed for the B2B pitch
+  ("verify without calling JITTEr"), add ECDSA signing to the attest response.
+- **Suspicion scoring** (the 6 passport signals) is not computed server-side;
+  the per-(site,user) rate limit only partially covers `excessive_sessions`.
+- **Widget done-criteria gap:** the SDK returns a result object but does not yet
+  inject the `jitter_badge` hidden form field the spec lists.
+- **Canonical-engine drift:** CLAUDE.md calls `lab/jitter-box.js` canonical, but
+  it lags the shipped engines — still the 9-signal weights and no paste penalties
+  at all. The authoritative scorers per the 2026-03-07 design doc are
+  `sdk/src/core/jitter-box.js`, `extension/src/biometrics.js`, and now
+  `supabase/functions/_shared/scorer.ts` (the three this audit kept in lockstep).
+  Reconciling the lab proving-ground engine is a separate effort (its runners and
+  result reports are calibrated to it).
 
 ## Known limitations (deliberate, documented)
 

@@ -51,6 +51,7 @@
       lastKeydownTime: 0,
       humanChars: 0,
       alienChars: 0,
+      pasteSizes: [],
       backspaceCount: 0,
       pauseCount: 0,
 
@@ -115,7 +116,10 @@
       var s = getSession(el)
       s.pasteCount++
       var text = e.clipboardData ? e.clipboardData.getData('text/plain') : ''
-      if (text.length > 0) s.alienChars += text.length
+      if (text.length > 0) {
+        s.alienChars += text.length
+        s.pasteSizes.push(text.length) // per-paste size → size-weighted purity
+      }
     })
 
     el.addEventListener('copy', function() {
@@ -163,6 +167,7 @@
       dwellTimes: s.dwellTimes,
       humanChars: s.humanChars,
       alienChars: s.alienChars,
+      pasteSizes: s.pasteSizes,
       backspaceCount: s.backspaceCount,
       pauseCount: s.pauseCount,
     }
@@ -311,7 +316,7 @@
       user_id: userId,
       capture: result.captureData || {
         flightTimes: [], dwellTimes: [], humanChars: 0,
-        alienChars: 0, backspaceCount: 0, pauseCount: 0,
+        alienChars: 0, pasteSizes: [], backspaceCount: 0, pauseCount: 0,
       },
       meta: result.meta,
     }

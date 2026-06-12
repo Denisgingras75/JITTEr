@@ -66,6 +66,21 @@ function rampScore(raw, floor, ceiling) {
   return clamp01((floor - raw) / (floor - ceiling));
 }
 
+// Paste weighting (JITTER-PLAN.md) — kept identical to jitter-box.js.
+function pasteWeight(n) { return n < 50 ? 0.1 : n <= 300 ? 0.3 : 1.0; }
+function weightedAlienChars(pasteSizes, alienChars) {
+  var alien = alienChars || 0;
+  if (pasteSizes && pasteSizes.length) {
+    var sum = 0, accounted = 0;
+    for (var i = 0; i < pasteSizes.length; i++) {
+      sum += pasteWeight(pasteSizes[i]) * pasteSizes[i];
+      accounted += pasteSizes[i];
+    }
+    return round2(sum + Math.max(0, alien - accounted));
+  }
+  return alien;
+}
+
 // Standard normal CDF (Abramowitz & Stegun)
 function normalCDF(z) {
   if (z < -6) return 0;
@@ -134,6 +149,7 @@ function createSession() {
     // Counts
     humanChars: 0,
     alienChars: 0,
+    pasteSizes: [],
     totalKeystrokes: 0,
     backspaceCount: 0,
     pauseCount: 0,
@@ -277,6 +293,7 @@ function handlePaste(session, textLength) {
   session.pasteCount++;
   session.pastedChars += textLength;
   session.alienChars += textLength;
+  if (textLength > 0) session.pasteSizes.push(textLength); // per-paste size → size-weighted purity
 }
 
 // --- MOUSE HANDLER ---
@@ -521,13 +538,18 @@ function scoreWAR(session, profile) {
     components.dwell_uniformity = 0.5;
   }
 
-  // 10. Purity — paste detection
-  const total = session.humanChars + session.alienChars;
-  const pasteRatio = total > 0 ? session.alienChars / total : 0;
-  if (total >= 20) {
-    components.purity = rampScore(session.humanChars / total, WAR_RAMPS.purity[0], WAR_RAMPS.purity[1]);
-    if (pasteRatio > 0.50) flags.push('paste_heavy');
-    if (pasteRatio > 0.90) flags.push('paste_flood');
+  // 10. Purity — paste folded in by per-paste SIZE (transparent, not punished).
+  // Hard Rule #4: small pastes barely move purity; multiple pastes are flagged
+  // not penalized; only a near-total flood (>90% weighted) trips the hard guard.
+  const rawTotal = session.humanChars + session.alienChars;
+  const weightedAlien = weightedAlienChars(session.pasteSizes, session.alienChars);
+  const effTotal = session.humanChars + weightedAlien;
+  const pasteRatio = effTotal > 0 ? weightedAlien / effTotal : 0;
+  if (rawTotal >= 20) {
+    components.purity = rampScore(effTotal > 0 ? session.humanChars / effTotal : 1, WAR_RAMPS.purity[0], WAR_RAMPS.purity[1]);
+    const pasteCount = (session.pasteSizes && session.pasteSizes.length) || 0;
+    if (pasteCount > 1) flags.push('high_paste_volume'); // diagnostic only — no penalty
+    if (pasteRatio > 0.90) flags.push('paste_flood');    // hard guard vs paste laundering
   } else {
     components.purity = 0.5;
   }
@@ -544,10 +566,9 @@ function scoreWAR(session, profile) {
     bigram_uniform: 0.08,
     per_key_uniformity: 0.08,
     dwell_std_hard: 0.06,
-    paste_heavy: 0.15,
     no_editing_behavior: 0.05,
     non_lognormal: 0.05,
-    paste_flood: 0.30,
+    paste_flood: 0.30, // the one paste penalty — only a near-total flood
   };
 
   let penalty = 0;
@@ -555,13 +576,7 @@ function scoreWAR(session, profile) {
     if (PENALTIES[flag]) penalty += PENALTIES[flag];
   }
 
-  let war = round2(Math.max(0, raw_war - penalty));
-
-  // Purity multiplier — paste ratio directly scales WAR down
-  if (total > 0 && pasteRatio > 0.10) {
-    var purityMult = Math.max(0, 1 - pasteRatio);
-    war = round2(war * purityMult);
-  }
+  const war = round2(Math.max(0, raw_war - penalty));
 
   const tier = WAR_TIERS.find(([min]) => war >= min)[1];
 

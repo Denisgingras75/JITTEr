@@ -126,33 +126,43 @@ console.log('  WAR:', bot4.war, 'class:', bot4.classification, 'flags:', bot4.fl
 assert(bot4.flags.indexOf('no_editing_behavior') >= 0, 'Replay bot should have no_editing_behavior flag')
 assert(bot4.classification !== 'verified_human', 'Replay bot should not be verified_human, got ' + bot4.classification)
 
-// --- Bot 5: Paste flood — 95% pasted ---
-console.log('\n--- Bot 5: Paste flood (95% pasted) ---')
+// --- Bot 5: Paste flood — one big AI-essay paste, little typing ---
+// The laundering attack: paste 5000 chars of AI text, type a few. The size of
+// the single paste (>300 → 1.0x weight) drives the weighted ratio past 90% and
+// trips the one hard paste guard. Must still be caught as a bot.
+console.log('\n--- Bot 5: Paste flood (one big paste) ---')
 var bot5 = JitterBox.scoreRaw({
   flightTimes: genTimes(20, 200, 80),
   dwellTimes: genTimes(20, 90, 30),
   humanChars: 20,
-  alienChars: 380,
+  alienChars: 5000,
+  pasteSizes: [5000],
   backspaceCount: 0,
   pauseCount: 0,
 })
 console.log('  WAR:', bot5.war, 'class:', bot5.classification, 'flags:', bot5.flags)
-assert(bot5.war < 0.10, 'Paste flood WAR=' + bot5.war + ' should be < 0.10')
 assert(bot5.flags.indexOf('paste_flood') >= 0, 'Should have paste_flood flag')
+assert(bot5.classification === 'bot', 'Paste flood class=' + bot5.classification + ' should be bot')
 
-// --- Bot 6: Paste heavy — 60% pasted ---
-console.log('\n--- Bot 6: Paste heavy (60% pasted) ---')
+// --- Bot 6: Moderate paste (a quote) — NOT a bot ---
+// Per Hard Rule #4 (transparent, not punished), a human who types a real review
+// and pastes a 60-char quote must NOT be hard-penalized the way the old
+// multiplier did (which could only yield ≤0.40 for a 60% paste). This is now a
+// POSITIVE test: moderate paste scores on typing merit, no paste_heavy penalty.
+console.log('\n--- Bot 6: Moderate paste (transparent, not punished) ---')
 var bot6 = JitterBox.scoreRaw({
   flightTimes: genTimes(40, 200, 80),
   dwellTimes: genTimes(40, 90, 30),
   humanChars: 40,
   alienChars: 60,
-  backspaceCount: 2,
-  pauseCount: 1,
+  pasteSizes: [60],
+  backspaceCount: 6,
+  pauseCount: 2,
 })
 console.log('  WAR:', bot6.war, 'class:', bot6.classification, 'flags:', bot6.flags)
-assert(bot6.war < humanResult.war * 0.5, 'Paste heavy WAR=' + bot6.war + ' should be < 50% of human')
-assert(bot6.flags.indexOf('paste_heavy') >= 0, 'Should have paste_heavy flag')
+assert(bot6.flags.indexOf('paste_heavy') < 0, 'paste_heavy penalty should no longer exist, got ' + bot6.flags)
+assert(bot6.flags.indexOf('paste_flood') < 0, 'Moderate paste should not trip the flood guard')
+assert(bot6.war > 0.40, 'Moderate paste WAR=' + bot6.war + ' should score on typing merit (>0.40), not be crushed')
 
 // --- Bot 7: Burst bot — alternates fast bursts and pauses ---
 console.log('\n--- Bot 7: Burst bot (fast bursts + long gaps) ---')

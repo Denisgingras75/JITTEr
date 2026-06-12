@@ -47,7 +47,7 @@ archive/          All previous versions (proof of work)
 2. **Never say "AI detector"** — say "human verification" or "proof of human typing process"
 3. **Never claim bulletproof** — claim economically irrational to fake at scale
 4. **Badge must be cryptographically signed** (ECDSA P-256)
-5. **Paste is transparent, not punished** — users paste quotes, URLs, names. Normal.
+5. **Paste is transparent, not punished** — users paste quotes, URLs, names. Normal. Per-paste size weights purity (0.1x/0.3x/1.0x); no penalty except `paste_flood` (>90% weighted) as the anti-laundering guard. See JITTER-PLAN.md.
 6. **jitter-box.js is the canonical engine.** biometrics.js is legacy. Port, don't fork.
 7. All IP owned by Denis Gingras. See IP_DECLARATION.md.
 

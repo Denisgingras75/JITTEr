@@ -23,6 +23,7 @@ export type Capture = {
   dwellTimes?: number[]
   humanChars?: number
   alienChars?: number
+  pasteSizes?: number[]
   backspaceCount?: number
   pauseCount?: number
 }
@@ -62,10 +63,9 @@ const PENALTIES: Record<string, number> = {
   bigram_uniform: 0.08,
   per_key_uniformity: 0.08,
   dwell_std_hard: 0.06,
-  paste_heavy: 0.15,
   no_editing_behavior: 0.05,
   non_lognormal: 0.05,
-  paste_flood: 0.30,
+  paste_flood: 0.30, // the one paste penalty — only a near-total flood
 }
 const WAR_TIERS: [number, string][] = [
   [0.80, 'Hall of Fame'], [0.60, 'All-Star'], [0.40, 'Solid'],
@@ -99,6 +99,23 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const rampScore = (raw: number, floor: number, ceiling: number) =>
   floor < ceiling ? clamp01((raw - floor) / (ceiling - floor))
                   : clamp01((floor - raw) / (floor - ceiling))
+
+// Paste weighting (JITTER-PLAN.md) — MUST stay byte-identical to the same
+// helper in sdk/src/core/jitter-box.js or parity breaks.
+const pasteWeight = (n: number) => (n < 50 ? 0.1 : n <= 300 ? 0.3 : 1.0)
+function weightedAlienChars(pasteSizes: number[] | undefined, alienChars: number): number {
+  const alien = alienChars || 0
+  if (pasteSizes && pasteSizes.length) {
+    let sum = 0, accounted = 0
+    for (let i = 0; i < pasteSizes.length; i++) {
+      const n = pasteSizes[i]
+      sum += pasteWeight(n) * n
+      accounted += n
+    }
+    return round2(sum + Math.max(0, alien - accounted))
+  }
+  return alien
+}
 
 function normalCDF(z: number): number {
   if (z < -6) return 0
@@ -263,12 +280,17 @@ export function scoreRaw(capture: Capture): Scored {
   c.editing = (editSub + pauseSub) / 2
   if (profile.edit_ratio < 0.03 && profile.pause_freq < 0.4) flags.push('no_editing_behavior')
 
-  // Purity — paste detection
-  const pasteRatio = totalChars > 0 ? alienChars / totalChars : 0
+  // Purity — paste folded in by per-paste SIZE (transparent, not punished).
+  // Small pastes barely move purity; multiple pastes are flagged not penalized;
+  // only a near-total paste flood (>90% weighted) trips the one hard guard.
+  const weightedAlien = weightedAlienChars(capture.pasteSizes, alienChars)
+  const effTotal = humanChars + weightedAlien
+  const pasteRatio = effTotal > 0 ? weightedAlien / effTotal : 0
   if (totalChars >= MIN_CHARS_FOR_SCORE) {
-    c.purity = rampScore(humanChars / totalChars, ...RAMPS.purity)
-    if (pasteRatio > 0.50) flags.push('paste_heavy')
-    if (pasteRatio > 0.90) flags.push('paste_flood')
+    c.purity = rampScore(effTotal > 0 ? humanChars / effTotal : 1, ...RAMPS.purity)
+    const pasteCount = capture.pasteSizes?.length ?? 0
+    if (pasteCount > 1) flags.push('high_paste_volume') // diagnostic only — no penalty
+    if (pasteRatio > 0.90) flags.push('paste_flood')    // hard guard vs paste laundering
   } else {
     c.purity = 0.5
   }
@@ -280,12 +302,7 @@ export function scoreRaw(capture: Capture): Scored {
   // LAYER 2: soft penalties
   let penalty = 0
   for (const f of flags) if (PENALTIES[f]) penalty += PENALTIES[f]
-  let war = round2(Math.max(0, raw_war - penalty))
-
-  // Purity multiplier — paste ratio directly scales WAR down
-  if (totalChars > 0 && pasteRatio > 0.10) {
-    war = round2(war * Math.max(0, 1 - pasteRatio))
-  }
+  const war = round2(Math.max(0, raw_war - penalty))
 
   const tier = tierFor(war)
   return { war, raw_war, classification: classify(war), tier, flags, components: c }

@@ -134,11 +134,17 @@ Layer 3 -- Passport card modal (click the badge)
   curve under-caps mid-range (day 30 -> 0.58 vs 0.80) and holds mature authors
   at Suspicious. Enforced by tests/scorer-parity.test.mjs.
 
-**Paste weighting (transparent, not punished):**
+**Paste weighting (transparent, not punished) — IMPLEMENTED:**
+  Per-paste SIZE scales each paste's contribution to "alien" chars, which feed
+  PURITY only (weight 0.03). No hard penalty, no war×(1−ratio) multiplier.
   < 50 chars  -> 0.1x alien weight  (URL, name -- noise)
   50-300 chars -> 0.3x alien weight  (shown in stats, mild impact)
   > 300 chars  -> 1.0x alien weight  (shown prominently)
-  Multiple pastes -> flag 'high_paste_volume', not a hard WAR penalty
+  Multiple pastes -> flag 'high_paste_volume', NOT a penalty
+  ONE hard guard remains: 'paste_flood' (−0.30) when weighted paste > 90% of the
+  effective total — the anti-laundering backstop (paste a 5000-char AI essay,
+  type 10 words → still caught as bot). Enforced by tests/scorer-parity.test.mjs
+  and tests/bot-battery.test.js.
 
 **WAR Tiers:**
   8.0-10   Hall of Fame

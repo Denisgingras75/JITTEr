@@ -159,6 +159,84 @@ console.log('\nFuzz parity (300 random captures):')
   check('0 mismatches across 300 fuzzed captures', mismatches === 0, `${mismatches} mismatches; first: ${firstDetail}`)
 }
 
+// ── Paste weighting (JITTER-PLAN.md: transparent, not punished) ──────────────
+
+console.log('\nPaste weighting (size-weighted purity, flag not penalty):')
+{
+  // Base typist with enough editing that adding paste doesn't collapse the
+  // separate edit_ratio signal — isolates the purity/paste path under test.
+  function base() {
+    const c = humanCapture(rng(55), 60)
+    c.backspaceCount = 14
+    return c
+  }
+  function withPaste(alienChars, pasteSizes) {
+    const c = base()
+    c.alienChars = alienChars
+    if (pasteSizes) c.pasteSizes = pasteSizes
+    return serverScoreRaw(c)
+  }
+  const clean = serverScoreRaw(base())
+
+  // 40-char URL paste (<50 → 0.1x weight): effectively invisible to WAR.
+  const url = withPaste(40, [40])
+  check('small paste (URL) barely dents WAR',
+    Math.abs(url.war - clean.war) <= 0.02 && !url.flags.includes('paste_flood'),
+    `clean=${clean.war} url=${url.war}`)
+
+  // Multiple pastes → high_paste_volume flag, but NOT a penalty.
+  const multi = withPaste(80, [40, 40])
+  check('multiple pastes are flagged, not penalized',
+    multi.flags.includes('high_paste_volume') && !multi.flags.includes('paste_flood'),
+    `flags=[${multi.flags}]`)
+
+  // 5000-char AI essay pasted + a little typing → flood guard fires → bot.
+  const flood = (() => { const c = base(); c.humanChars = 30; c.alienChars = 5000; c.pasteSizes = [5000]; return serverScoreRaw(c) })()
+  check('paste flood (AI laundering) is caught as bot',
+    flood.flags.includes('paste_flood') && flood.classification === 'bot',
+    `war=${flood.war} class=${flood.classification} flags=[${flood.flags}]`)
+
+  // ANTI-REGRESSION: a 60% mid-paste must NOT be crushed the way the old
+  // war×(1−ratio) multiplier + paste_heavy did (that path could only yield
+  // ≤0.40 for a 60% paste). The hybrid scores it on typing merit.
+  const moderate = withPaste(90, [90]) // 90 alien vs 60 human
+  check('moderate paste no longer hard-penalized (old model gave ≤0.40)',
+    moderate.war > 0.45 && !moderate.flags.includes('paste_flood'),
+    `moderate=${moderate.war}`)
+
+  // SIZE WEIGHTING WORKS: 400 alien chars as ONE big paste (1.0x) drives purity
+  // far lower than the SAME 400 chars split into ten 40-char pastes (0.1x each).
+  const oneBig = (() => { const c = base(); c.alienChars = 400; c.pasteSizes = [400]; return serverScoreRaw(c) })()
+  const tenSmall = (() => { const c = base(); c.alienChars = 400; c.pasteSizes = Array(10).fill(40); return serverScoreRaw(c) })()
+  check('per-paste size weighting: 1×400 hurts purity more than 10×40',
+    tenSmall.war > oneBig.war && tenSmall.components.purity > oneBig.components.purity,
+    `oneBig=${oneBig.war}(pur ${oneBig.components.purity}) tenSmall=${tenSmall.war}(pur ${tenSmall.components.purity})`)
+}
+
+// Fuzz parity WITH paste sizes — exercises the size-weighting path on both engines.
+console.log('\nFuzz parity with paste sizes (200 captures):')
+{
+  const r = rng(0x9A57E5)
+  let mismatches = 0, firstDetail = ''
+  for (let i = 0; i < 200; i++) {
+    const cap = randomFuzzCapture(r)
+    const np = Math.floor(r() * 4)
+    cap.pasteSizes = []
+    let acc = 0
+    for (let k = 0; k < np; k++) { const s = Math.floor(r() * 1200); cap.pasteSizes.push(s); acc += s }
+    cap.alienChars = acc // keep alienChars consistent with the sizes
+    const client = clientScoreRaw(structuredClone(cap))
+    const server = serverScoreRaw(structuredClone(cap))
+    const ok = client.classification === 'insufficient_data'
+      ? server.classification === 'insufficient_data'
+      : client.war === server.war &&
+        client.classification === server.classification &&
+        JSON.stringify(client.flags) === JSON.stringify(server.flags)
+    if (!ok) { mismatches++; if (!firstDetail) firstDetail = `iter ${i}: client {war:${client.war},flags:[${client.flags}]} server {war:${server.war},flags:[${server.flags}]}` }
+  }
+  check('0 mismatches across 200 paste-sized captures', mismatches === 0, `${mismatches}; first: ${firstDetail}`)
+}
+
 // ── Time cap semantics ───────────────────────────────────────────────────────
 
 console.log('\nTime cap semantics:')
@@ -201,7 +279,7 @@ console.log('\nTime cap semantics:')
   // REGRESSION: suspicious typing must not be PROMOTED by a high cap.
   // Original patch: min(raw_war 0.85, cap 1.0) = 0.85 → 'verified'. Wrong.
   const promo = applyTimeCap(
-    { war: 0.55, raw_war: 0.85, classification: 'suspicious', flags: ['paste_heavy'] }, now - 180 * DAY, now)
+    { war: 0.55, raw_war: 0.85, classification: 'suspicious', flags: ['non_lognormal'] }, now - 180 * DAY, now)
   check('cap never promotes suspicious to verified',
     promo.classification === 'suspicious' && promo.war === 0.55, JSON.stringify(promo))
 

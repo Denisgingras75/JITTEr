@@ -92,12 +92,25 @@ function count(v: unknown): number {
     ? Math.min(Math.round(v), MAX_COUNT) : 0
 }
 
+// Paste sizes: char counts, so allow up to MAX_BODY_BYTES per entry, bounded
+// length. Used for size-weighted purity — never indexed into raw content.
+function sizeArray(a: unknown): number[] {
+  if (!Array.isArray(a)) return []
+  const out: number[] = []
+  for (const v of a) {
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_BODY_BYTES) out.push(Math.round(v))
+    if (out.length >= MAX_TIMINGS) break
+  }
+  return out
+}
+
 function sanitizeCapture(c: any): Capture {
   return {
     flightTimes: numArray(c.flightTimes),
     dwellTimes: numArray(c.dwellTimes),
     humanChars: count(c.humanChars),
     alienChars: count(c.alienChars),
+    pasteSizes: sizeArray(c.pasteSizes),
     backspaceCount: count(c.backspaceCount),
     pauseCount: count(c.pauseCount),
   }
