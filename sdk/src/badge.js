@@ -38,8 +38,7 @@ var LABELS = {
 /**
  * Create a Jitter badge element.
  * @param {string} classification - 'verified' | 'suspicious' | 'bot' | 'building'
- * @param {Object} [opts]
- * @param {number} [opts.confidence] - 0-1 confidence score to show
+ * @param {Object} [opts] - reserved; the badge shows a label only, never a score.
  * @returns {HTMLElement}
  */
 function createBadge(classification, opts) {
@@ -56,12 +55,8 @@ function createBadge(classification, opts) {
 
   var badge = document.createElement('span')
   badge.className = 'jitter-badge jitter-badge--' + type
+  // Label only — the numeric confidence/score is NEVER rendered (score secrecy).
   badge.innerHTML = ICONS[type] + ' ' + LABELS[type]
-
-  if (opts && opts.confidence != null) {
-    var pct = Math.round(opts.confidence * 100)
-    badge.innerHTML += ' <span style="opacity:0.7">(' + pct + '%)</span>'
-  }
 
   shadow.appendChild(style)
   shadow.appendChild(badge)

@@ -435,7 +435,13 @@ function attach(el) {
 
   // ── Handlers ─────────────────────────────────────────────────────
 
+  // Event provenance: hardware events carry isTrusted === true. Synthetic
+  // JS-dispatched events (the naive copy-type injection vector) are dropped at
+  // every capture entry point so they never reach the biometric profile. This
+  // does NOT stop driver-level synthetic input (CDP/Playwright report
+  // isTrusted === true); that is the multi-channel + time-moat problem.
   function onKeydown(e) {
+    if (!e.isTrusted) return
     var now = performance.now()
 
     if (e.ctrlKey || e.metaKey || e.altKey) return
@@ -497,6 +503,7 @@ function attach(el) {
   }
 
   function onKeyup(e) {
+    if (!e.isTrusted) return
     var now = performance.now()
 
     if (e.ctrlKey || e.metaKey || e.altKey) return
@@ -524,6 +531,7 @@ function attach(el) {
   }
 
   function onPaste(e) {
+    if (!e.isTrusted) return
     var pasted = e.clipboardData ? e.clipboardData.getData('text') : ''
     if (pasted.length > 0) {
       data.alienChars += pasted.length
@@ -532,6 +540,7 @@ function attach(el) {
   }
 
   function onMouseMove(e) {
+    if (!e.isTrusted) return
     var now = performance.now()
     if (now - data.lastMouseSampleTime < MOUSE_SAMPLE_INTERVAL) return
     data.lastMouseSampleTime = now
@@ -547,7 +556,11 @@ function attach(el) {
   var lastInputTime = 0
   var lastInputLength = 0
 
-  function onInput() {
+  function onInput(e) {
+    // Synthetic input events (dispatched programmatically) are untrusted; real
+    // mobile soft-keyboard input is trusted. This closes the input-fallback
+    // bypass where value is mutated + an input event faked to inject counts.
+    if (e && e.isTrusted === false) return
     var now = performance.now()
     var currentLength = el.value ? el.value.length : 0
 

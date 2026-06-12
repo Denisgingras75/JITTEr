@@ -74,6 +74,8 @@
     setSession(el, session)
 
     el.addEventListener('keydown', function(e) {
+      // Drop synthetic (non-hardware) events — see note in core/jitter-box.js.
+      if (!e.isTrusted) return
       var now = performance.now()
       var s = getSession(el)
 
@@ -102,6 +104,7 @@
     })
 
     el.addEventListener('keyup', function(e) {
+      if (!e.isTrusted) return
       var now = performance.now()
       var s = getSession(el)
       if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && s.lastKeydownTime > 0) {
@@ -113,6 +116,7 @@
     })
 
     el.addEventListener('paste', function(e) {
+      if (!e.isTrusted) return
       var s = getSession(el)
       s.pasteCount++
       var text = e.clipboardData ? e.clipboardData.getData('text/plain') : ''
@@ -189,15 +193,16 @@
     }
 
     return {
+      // war is kept LOCAL ONLY for the attest gate + optional live UI; it is
+      // never sent to the server and never rendered into the DOM (the badge is
+      // label-only). raw_war and flags are NOT exposed — they are pure
+      // detector-internal oracles with no client purpose (score secrecy).
       war: result.war,
-      raw_war: result.raw_war,
       classification: result.classification,
-      flags: result.flags,
       badge: buildBadge(result),
       meta: buildMeta(s),
       // Raw timing arrays travel with the result so scoreAndAttest can POST them
-      // to the signing proxy. The server re-scores authoritatively; result.war
-      // above is LOCAL ONLY (live UI feedback) and is never sent.
+      // to the signing proxy. The server re-scores authoritatively.
       captureData: captureData,
     }
   }
@@ -237,7 +242,8 @@
       'font-weight: 600; cursor: default; }' +
       '.dot { width: 6px; height: 6px; border-radius: 50%; background: ' + color + '; }' +
       '</style>' +
-      '<span class="badge" title="WAR: ' + result.war + '">' +
+      // Label only — no title="WAR: ...". The score never enters the DOM.
+      '<span class="badge">' +
       '<span class="dot"></span>' + label +
       '</span>'
 

@@ -75,6 +75,22 @@ async function botType(page, text) {
 }
 
 /**
+ * Perform a REAL paste (trusted event). Writes text to the clipboard and presses
+ * the platform paste shortcut, which fires a paste event with isTrusted === true
+ * and natively inserts the text into the focused contenteditable. Synthetic
+ * `dispatchEvent(new ClipboardEvent('paste'))` is intentionally rejected by the
+ * capture path (event-provenance guard), so tests must paste for real.
+ * Requires the context to grant ['clipboard-read','clipboard-write'].
+ */
+async function realPaste(page, text) {
+  const editor = page.locator('#editor');
+  await editor.click();
+  await page.evaluate(t => navigator.clipboard.writeText(t), text);
+  const isMac = process.platform === 'darwin';
+  await page.keyboard.press(isMac ? 'Meta+V' : 'Control+V');
+}
+
+/**
  * Get all sidebar stats as an object.
  */
 async function getStats(page) {
@@ -146,6 +162,7 @@ module.exports = {
   openVerify,
   humanType,
   botType,
+  realPaste,
   getStats,
   mintBadge,
   extractBase64FromBadge,

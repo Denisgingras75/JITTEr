@@ -351,10 +351,9 @@
                     }
                 }
 
-                const suspicionScore = data.suspicionScore || 0;
-                const riskClass = getRiskClass(suspicionScore);
-                const riskEmoji = getRiskEmoji(suspicionScore);
-                const riskText = getRiskText(suspicionScore);
+                // Classification LABEL only — the suspicion score (and the risk
+                // emoji/text derived from it) are detector outputs and are not shown.
+                const verdictLabel = ({ verified: 'Verified Human', building: 'Building Trust', suspicious: 'Unverified', bot: 'Suspicious' })[data.classification] || (data.title || 'Decoded');
 
                 // Build crypto status banner
                 const cryptoBanner = cryptoStatus === 'valid'
@@ -369,73 +368,22 @@
                     <div class="result-card">
                         <div class="result-header">
                             <h2 style="margin:0; color:#fff;">${headerTitle}</h2>
-                            <div class="risk-badge ${riskClass}">
-                                ${riskEmoji} ${riskText} (${suspicionScore}/100)
-                            </div>
+                            <div class="risk-badge">${verdictLabel}</div>
                         </div>
                         ${cryptoBanner}
 
-                        ${data.war != null ? `
-                        <div class="metric-grid">
-                            <div class="metric">
-                                <div class="metric-label">WAR Score</div>
-                                <div class="metric-value" style="color: ${data.war >= 0.60 ? '#00F0FF' : data.war >= 0.40 ? '#FFD700' : '#FF0055'}">
-                                    ${data.war}
-                                </div>
-                                <div class="metric-status" style="color: ${data.war >= 0.60 ? '#00F0FF' : data.war >= 0.40 ? '#FFD700' : '#FF0055'}">
-                                    ${data.war_tier || 'Unknown'}${data.raw_war != null && data.raw_war !== data.war ? ' (capped from ' + data.raw_war + ')' : ''}
-                                </div>
-                            </div>
-
-                            <div class="metric">
-                                <div class="metric-label">Time Cap</div>
-                                <div class="metric-value" style="color: ${(data.time_cap || 0) >= 0.80 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.time_cap != null ? Math.round(data.time_cap * 100) + '%' : '—'}
-                                </div>
-                                <div class="metric-status" style="color: ${(data.accountAge || 0) >= 30 ? '#00F0FF' : '#FFD700'}">
-                                    ${(data.accountAge || 0)} day${data.accountAge !== 1 ? 's' : ''} old
-                                </div>
-                            </div>
-
-                            <div class="metric">
-                                <div class="metric-label">Total Keystrokes</div>
-                                <div class="metric-value" style="color: #FFD700">
-                                    ${formatNumber(data.passport || 0)}
-                                </div>
-                                <div class="metric-status" style="color: #FFD700">
-                                    ${data.passportLevel || 'Unknown'}
-                                </div>
-                            </div>
-
-                            <div class="metric">
-                                <div class="metric-label">Session Integrity</div>
-                                <div class="metric-value" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.integrity}%
-                                </div>
-                                <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.integrity >= 80 ? 'Clean' : 'Review'}
-                                </div>
-                            </div>
-                        </div>
-                        ` : `
+                        <!-- Score secrecy: the detector WAR, raw_war, time cap,
+                             cognitive ratio, entropy, and the biometric profile are
+                             NOT rendered. Only the classification label (in the
+                             banner above) plus transparency stats are shown. -->
                         <div class="metric-grid">
                             <div class="metric">
                                 <div class="metric-label">Session Integrity</div>
                                 <div class="metric-value" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.integrity}%
+                                    ${data.integrity != null ? data.integrity + '%' : '—'}
                                 </div>
                                 <div class="metric-status" style="color: ${data.integrity >= 80 ? '#00F0FF' : '#FFD700'}">
                                     ${data.integrity >= 80 ? 'Clean' : 'Review'}
-                                </div>
-                            </div>
-
-                            <div class="metric">
-                                <div class="metric-label">Cognitive Ratio</div>
-                                <div class="metric-value" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.cr}
-                                </div>
-                                <div class="metric-status" style="color: ${data.cr >= 1.5 ? '#00F0FF' : '#FFD700'}">
-                                    ${data.cr >= 1.5 ? 'Human-like' : 'Low variance'}
                                 </div>
                             </div>
 
@@ -459,7 +407,6 @@
                                 </div>
                             </div>
                         </div>
-                        `}
 
                         <div class="section-header">SESSION DETAILS</div>
                         <div class="info-row">
@@ -474,81 +421,12 @@
                             <span class="info-label">Human Edits</span>
                             <span class="info-value">${data.edits || 0}</span>
                         </div>
-                        <div class="info-row">
-                            <span class="info-label">Entropy Score</span>
-                            <span class="info-value">${data.entropy || 0}/100</span>
-                        </div>
-
-                        <div class="section-header">BIOMETRIC PROFILE</div>
-                        <div class="info-row">
-                            <span class="info-label">Dwell Time</span>
-                            <span class="info-value">${data.meanDwell != null ? data.meanDwell + 'ms (\u00b1' + (data.stdDwell || 0) + ')' : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Flight Time</span>
-                            <span class="info-value">${data.meanFlight != null ? data.meanFlight + 'ms (\u00b1' + (data.stdFlight || 0) + ')' : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">DD Time</span>
-                            <span class="info-value">${data.meanDd != null ? data.meanDd + 'ms (\u00b1' + (data.stdDd || 0) + ')' : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Edit Ratio</span>
-                            <span class="info-value">${data.editRatio != null ? (data.editRatio * 100).toFixed(1) + '%' : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Pause Frequency</span>
-                            <span class="info-value">${data.pauseFreq != null ? data.pauseFreq + '/100 keys' : '\u2014'}</span>
-                        </div>
-
-                        <div class="section-header">COMPOSITION ANALYSIS</div>
-                        <div class="info-row">
-                            <span class="info-label">Burst Count</span>
-                            <span class="info-value">${data.burstCount != null ? data.burstCount : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Avg Burst Length</span>
-                            <span class="info-value">${data.avgBurstLength != null ? data.avgBurstLength + ' keys' : '\u2014'}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Burst Variance</span>
-                            <span class="info-value" style="color: ${data.burstVariance != null && data.burstVariance < 0.15 ? '#FFD700' : '#fff'}">${data.burstVariance != null ? data.burstVariance : '\u2014'}</span>
-                        </div>
 `;
 
-                // Cursor tracking (writer mode only)
-                if (data.editingLinearity != null) {
-                    const linearityPct = (data.editingLinearity * 100).toFixed(0);
-                    const linearityColor = data.editingLinearity > 0.95 ? '#FFD700' : '#00F0FF';
-                    html += `
-                        <div class="info-row">
-                            <span class="info-label">Editing Linearity</span>
-                            <span class="info-value" style="color: ${linearityColor}">${linearityPct}%</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Cursor Jumps</span>
-                            <span class="info-value">${data.cursorJumps || 0}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Backward Edits</span>
-                            <span class="info-value">${data.backwardEdits || 0}</span>
-                        </div>
-                    `;
-                }
-
-                // Fatigue trend
-                if (data.fatigueWindows && data.fatigueWindows.length > 1) {
-                    const first = data.fatigueWindows[0];
-                    const last = data.fatigueWindows[data.fatigueWindows.length - 1];
-                    const trend = last > first ? '\u2197 slowing' : '\u2198 speeding up';
-                    const trendColor = last > first ? '#FFD700' : '#00F0FF';
-                    html += `
-                        <div class="info-row">
-                            <span class="info-label">Fatigue Trend</span>
-                            <span class="info-value" style="color: ${trendColor}">${data.fatigueWindows.join(' \u2192 ')} <span style="font-size:12px">(${trend})</span></span>
-                        </div>
-                    `;
-                }
+                // BIOMETRIC PROFILE / COMPOSITION ANALYSIS / FATIGUE / LINEARITY
+                // sections intentionally removed \u2014 those are detector internals
+                // (dwell/flight/DD timings, edit ratio, burst stats, fatigue, K-S
+                // shape) that double as an evasion-tuning oracle. Score secrecy.
 
                 html += `
                         <div class="section-header">PASSPORT PROFILE</div>
@@ -586,8 +464,9 @@
                     `;
                 }
 
-                // Transcription warning
-                if (data.transcriptionFlag) {
+                // Transcription/burst-pattern detector verdict is a detector
+                // output and is NOT surfaced (score secrecy). Disabled.
+                if (false) {
                     html += `
                         <div class="alert-box" style="background: #FFD70011; border-color: #FFD700;">
                             <div class="alert-title" style="color: #FFD700;">\u26a0\ufe0f TRANSCRIPTION PATTERN DETECTED</div>
@@ -599,32 +478,18 @@
                     `;
                 }
 
-                // Show warnings if high risk
-                if (suspicionScore >= 40) {
-                    html += `
-                        <div class="alert-box">
-                            <div class="alert-title">⚠️ SUSPICIOUS PATTERNS DETECTED</div>
-                            ${data.avgDailyKeys > 3000 ? '<div class="alert-item">High daily output (' + formatNumber(data.avgDailyKeys) + ' keys/day)</div>' : ''}
-                            ${data.accountAge < 7 && data.passport > 5000 ? '<div class="alert-item">New account with suspiciously high output</div>' : ''}
-                            ${data.cr < 1.5 ? '<div class="alert-item">Low cognitive ratio (bot-like typing)</div>' : ''}
-                            ${data.integrity < 80 ? '<div class="alert-item">High paste percentage</div>' : ''}
-                            ${data.burstVariance != null && data.burstVariance < 0.15 && data.burstCount > 5 ? '<div class="alert-item">Unnaturally consistent burst pattern</div>' : ''}
-                            ${data.editingLinearity != null && data.editingLinearity > 0.95 && data.keys > 500 ? '<div class="alert-item">Pure forward typing (possible transcription)</div>' : ''}
-                            <div style="margin-top:10px; font-size:12px; color:#ddd;">
-                                Recommendation: Review this submission manually
-                            </div>
-                        </div>
-                    `;
-                } else if (suspicionScore < 20 && cryptoStatus === 'valid') {
+                // Crypto-status summary only — no detector scores, suspicion
+                // verdicts, or biometric thresholds are rendered (score secrecy).
+                if (cryptoStatus === 'valid') {
                     html += `
                         <div class="success-box">
-                            ✅ Signature verified + all metrics within normal human ranges. High confidence in authenticity.
+                            ✅ Signature matches the badge payload (the contents have not been altered since signing).
                         </div>
                     `;
-                } else if (suspicionScore < 20 && cryptoStatus === 'unsigned') {
+                } else if (cryptoStatus === 'unsigned') {
                     html += `
                         <div class="success-box" style="background:#FFD70011;border-color:#FFD700;color:#FFD700;">
-                            ⚠️ Metrics look human, but no cryptographic proof. Ask student to re-submit using Jitter v2.0.
+                            ⚠️ No cryptographic signature — authenticity cannot be confirmed.
                         </div>
                     `;
                 }

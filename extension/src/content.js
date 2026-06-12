@@ -68,7 +68,13 @@ document.addEventListener('input', (e) => {
 }, true);
 
 // --- KEYSTROKE DYNAMICS ---
+// Event provenance: only hardware-generated events carry isTrusted === true.
+// JS-dispatched synthetic events (the naive Condrey copy-type vector) are
+// dropped here so they never enter the biometric session. NOTE: this does NOT
+// stop driver-level injection (CDP/Playwright produce isTrusted === true) — that
+// is covered by the multi-channel + time-moat strategy, not this guard.
 window.addEventListener('keydown', (e) => {
+    if (!e.isTrusted) return;
     if (e.key === 'Backspace' || e.key === 'Delete') {
         JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
         if (project.isActive) updateUI();
@@ -90,10 +96,12 @@ window.addEventListener('keydown', (e) => {
 }, true);
 
 window.addEventListener('keyup', (e) => {
+    if (!e.isTrusted) return;
     JitterBio.handleKeyup(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
 }, true);
 
 document.addEventListener('mousemove', (e) => {
+    if (!e.isTrusted) return;
     JitterBio.handleMouseMove(bioSession, e.clientX, e.clientY);
 });
 
@@ -109,6 +117,7 @@ function updatePassportLevel() {
 
 // --- UTILS ---
 window.addEventListener('paste', (e) => {
+    if (!e.isTrusted) return;
     const pastedText = e.clipboardData?.getData('text') || '';
     if (pastedText.length > 0) {
         // Always track paste in bio session (WAR purity signal)
@@ -189,22 +198,15 @@ function updateUI() {
         </div>
         <div class="jitter-body">
             ${project.isActive ? (() => {
+                // Score secrecy: the live HUD shows a qualitative status + the
+                // transparency stats only — never the numeric WAR, tier, signal
+                // components, entropy, or cognitive ratio (those are the oracle an
+                // attacker would tune against, and this DOM is readable by the host page).
                 const loki = JitterBio.analyzeLoki(bioSession);
-                const profile = JitterBio.getProfile(bioSession);
-                const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
-                const warDisplay = warResult ? warResult.war : '—';
-                const tierDisplay = warResult ? warResult.tier : '—';
-                const warColor = warResult && warResult.war >= 0.60 ? '#00F0FF' : warResult && warResult.war >= 0.40 ? '#FFD700' : '#FF0055';
+                const statusLabel = loki.isBot ? 'Synthetic' : 'Capturing…';
                 return `
-                <div class="jitter-section-title">WAR SCORE</div>
-                <div class="jitter-row"><span>WAR</span><span class="jitter-val" style="color:${warColor};font-size:16px">${warDisplay}</span></div>
-                <div class="jitter-row"><span>Tier</span><span class="jitter-val" style="color:${warColor}">${tierDisplay}</span></div>
-                <div style="width:100%; background:#222; height:4px; border-radius:2px; overflow:hidden; margin-bottom:10px;">
-                    <div style="width:${warResult ? warResult.war * 100 : 0}%; background:${warColor}; height:100%;"></div>
-                </div>
-                <div class="jitter-section-title">SIGNALS</div>
-                <div class="jitter-row"><span>Entropy</span><span class="jitter-val">${loki.entropy}</span></div>
-                <div class="jitter-row"><span>Cog. Ratio</span><span class="jitter-val" style="color:${loki.cognitiveRatio < 1.5 ? '#FFD700' : '#00F0FF'}">${loki.cognitiveRatio.toFixed(2)}</span></div>
+                <div class="jitter-section-title">STATUS</div>
+                <div class="jitter-row"><span>State</span><span class="jitter-val" style="color:${statusColor}">${statusLabel}</span></div>
                 <div class="jitter-row"><span>Edits</span><span class="jitter-val">${bioSession.backspaceCount}</span></div>
                 <div class="jitter-row"><span>Integrity</span><span class="jitter-val" style="color:${statusColor}">${statusText}</span></div>
                 <div class="jitter-btn primary" id="btn-copy">MINT BADGE</div>
@@ -238,7 +240,7 @@ function setupUI(){if(document.getElementById('jitter-shield'))return;const s=do
 document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(VERIFY_URL)){return}if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
 function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clearTimeout(scannerTimer);scannerTimer=setTimeout(scanLinks,500)}).observe(document.body,{childList:true,subtree:true})}
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
-function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;const warLine=d.war!=null?`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">WAR: ${d.war} (${d.war_tier||'—'})</div>`:`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${warLine}`;document.body.appendChild(h)}catch(e){}}
+function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;const label=({verified:'Verified Human',building:'Building Trust',suspicious:'Unverified',bot:'Suspicious'})[d.classification]||(d.title||'Verified');const statusLine=`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">${label}</div>`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${statusLine}`;document.body.appendChild(h)}catch(e){}}
 function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
 function showCertificate(b) {
     try {
@@ -272,7 +274,6 @@ function showCertificate(b) {
 
                 <div style="font-size:11px;color:#666;text-transform:uppercase;margin-bottom:8px;letter-spacing:1px;">Session Metrics</div>
                 <div class="jitter-row"><span>Integrity</span><span class="jitter-val" style="color:#00F0FF">${d.integrity}%</span></div>
-                <div class="jitter-row"><span>Cog. Ratio</span><span class="jitter-val">${d.cr || '1.0'}</span></div>
                 <div class="jitter-row"><span>Edits</span><span class="jitter-val">${d.edits || '0'}</span></div>
 
                 ${d.passport ? `
@@ -320,53 +321,35 @@ async function copyBadge(s, a) {
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
     }
 
-    // WAR score
+    // WAR is computed LOCALLY for the bot gate + classification label ONLY.
+    // Score secrecy: the numeric score, raw_war, components, flags, time cap,
+    // suspicion, and the raw biometric profile NEVER enter the badge payload,
+    // the DOM, the network, or logs. Only the coarse classification label travels.
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
+    const classification = cappedWar
+        ? (cappedWar.war >= 0.80 ? 'verified' : cappedWar.war >= 0.50 ? 'suspicious' : 'bot')
+        : 'building';
 
     const p = {
         version: '3.0',
         type: 'content',
         title: 'Verified',
         timestamp: Date.now(),
-        // WAR (v3.0)
-        war: cappedWar ? cappedWar.war : null,
-        raw_war: cappedWar ? cappedWar.raw_war : null,
-        war_tier: cappedWar ? cappedWar.tier : null,
-        time_cap: cappedWar ? cappedWar.timeCap : null,
-        war_components: cappedWar ? cappedWar.components : null,
-        war_flags: cappedWar ? cappedWar.flags : null,
-        // Legacy (kept for backward compat)
+        // Classification LABEL only — never the score or detector internals.
+        classification: classification,
+        // Transparency stats (purity/process receipt — not detector thresholds)
         integrity: integrity,
         keys: s.typed,
         pastedChars: pastedChars,
         pastes: s.pastes,
         date: new Date().toLocaleDateString(),
         edits: bioSession.backspaceCount,
-        cr: loki.cognitiveRatio.toFixed(2),
-        entropy: loki.entropy,
-        // Biometric profile
-        meanDwell: profile?.mean_dwell,
-        stdDwell: profile?.std_dwell,
-        meanFlight: profile?.mean_inter_key,
-        stdFlight: profile?.std_inter_key,
-        meanDd: profile?.mean_dd_time,
-        stdDd: profile?.std_dd_time,
-        editRatio: profile?.edit_ratio,
-        pauseCount: profile?.pause_count,
-        pauseFreq: profile?.pause_freq,
-        avgBurstLength: profile?.avg_burst_length,
-        burstVariance: profile?.burst_variance,
-        burstCount: profile?.burst_count,
-        fatigueWindows: profile?.fatigue_windows,
-        mousePath: profile?.mouse_path,
         // Passport data
         passport: passport.totalKeystrokes,
         passportLevel: passport.level,
         accountAge: accountAgeDays,
         sessions: passport.sessionsCompleted,
-        suspicionScore: passport.suspicionScore || 0,
-        suspicionSignals: passport.suspicionSignals || [],
         // Crypto chain
         previousBadge: previousBadgeHash,
         publicKeyId: publicKeyFingerprint,
@@ -403,9 +386,7 @@ async function copyBadge(s, a) {
             body: JSON.stringify({
                 user_id: userId,
                 site_key: 'extension',
-                war_score: p.war || 0,
-                classification: p.war >= 0.80 ? 'verified' : p.war >= 0.50 ? 'suspicious' : 'bot',
-                flags: p.war_flags || [],
+                classification: classification,
                 meta: { integrity: p.integrity, keys: p.keys, pastes: p.pastes, sessions: p.sessions },
             })
         });

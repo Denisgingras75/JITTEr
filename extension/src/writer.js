@@ -118,6 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editor.addEventListener('paste', handlePaste);
         editor.addEventListener('input', updateDashboard);
         editor.addEventListener('keyup', (e) => {
+            if (!e.isTrusted) return;
             JitterBio.handleKeyup(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
             JitterBio.handleCursorMove(bioSession, getCursorOffset());
         });
@@ -160,6 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function handleKey(e) {
+    // Drop synthetic events — only hardware keystrokes feed the ledger/biometrics.
+    if (!e.isTrusted) return;
     // 1. Navigation
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         JitterBio.handleCursorMove(bioSession, getCursorOffset());
@@ -179,8 +182,10 @@ function handleKey(e) {
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !forbidden.includes(e.key)) {
         const result = JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
 
-        // Record to ledger
-        recordOp({ op: 'key', char: e.key });
+        // Record a typing event as a TIMING marker only — never the character
+        // (Hard Rule #1). Content for teacher replay comes from the periodic
+        // content checkpoints, not from per-key capture.
+        recordOp({ op: 'key' });
 
         session.humanChars++;
         passport.totalKeystrokes++;
@@ -201,12 +206,14 @@ function handleKey(e) {
 }
 
 function handlePaste(e) {
+    if (!e.isTrusted) return;
     let text = '';
     if (e.clipboardData) { try { text = e.clipboardData.getData('text'); } catch (err) {} }
     if (text.length > 0) {
         session.alienChars += text.length;
         JitterBio.handlePaste(bioSession, text.length);
-        recordOp({ op: 'paste', text, len: text.length });
+        // Record paste SIZE only, never the pasted text (Hard Rule #1).
+        recordOp({ op: 'paste', len: text.length });
     }
     updateDashboard();
 }
@@ -328,56 +335,34 @@ async function exportBadge() {
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
     }
 
-    // WAR score
+    // WAR is computed LOCALLY for the classification label ONLY. Score secrecy:
+    // the numeric score, raw_war, components, flags, time cap, suspicion, and the
+    // raw biometric profile NEVER enter the badge payload, DOM, clipboard, or logs.
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
+    const classification = cappedWar
+        ? (cappedWar.war >= 0.80 ? 'verified' : cappedWar.war >= 0.50 ? 'suspicious' : 'bot')
+        : 'building';
 
     const payload = {
         version: '3.0',
         type: 'project',
         title: 'Jitter Doc',
         timestamp: Date.now(),
-        // WAR (v3.0)
-        war: cappedWar ? cappedWar.war : null,
-        raw_war: cappedWar ? cappedWar.raw_war : null,
-        war_tier: cappedWar ? cappedWar.tier : null,
-        time_cap: cappedWar ? cappedWar.timeCap : null,
-        war_components: cappedWar ? cappedWar.components : null,
-        war_flags: cappedWar ? cappedWar.flags : null,
-        // Legacy
+        // Classification LABEL only — never the score or detector internals.
+        classification: classification,
+        // Transparency stats (purity/integrity — the process receipt, not detector thresholds)
         purity: purity,
         integrity: integrity,
         keys: session.humanChars,
         edits: bioSession.backspaceCount,
-        cr: loki.cognitiveRatio.toFixed(2),
-        entropy: loki.entropy,
         date: date,
-        // Biometric profile
-        meanDwell: profile?.mean_dwell,
-        stdDwell: profile?.std_dwell,
-        meanFlight: profile?.mean_inter_key,
-        stdFlight: profile?.std_inter_key,
-        meanDd: profile?.mean_dd_time,
-        stdDd: profile?.std_dd_time,
-        editRatio: profile?.edit_ratio,
-        pauseCount: profile?.pause_count,
-        pauseFreq: profile?.pause_freq,
-        avgBurstLength: profile?.avg_burst_length,
-        burstVariance: profile?.burst_variance,
-        burstCount: profile?.burst_count,
-        cursorJumps: profile?.cursor_jumps,
-        backwardEdits: profile?.backward_edits,
-        editingLinearity: profile?.editing_linearity,
-        fatigueWindows: profile?.fatigue_windows,
-        mousePath: profile?.mouse_path,
         // Passport data
         passport: passport.totalKeystrokes,
         passportLevel: passport.level,
         accountAge: accountAgeDays,
         sessions: passport.sessionsCompleted,
         avgDailyKeys: passport.avgDailyKeys || 0,
-        suspicionScore: passport.suspicionScore || 0,
-        suspicionSignals: passport.suspicionSignals || [],
         // Writing Ledger
         ledgerHash: ledger.ledgerHash || null,
         ledgerBlocks: ledger.checkpoints.length,
@@ -407,7 +392,7 @@ async function exportBadge() {
     
     const url = `#jitter:${base64}`;
     const htmlBadge = `<a href="${url}" style="text-decoration:none;" data-jitter-payload="${base64}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${blockID}</span></a>`;
-    const plainBadge = `\n\n[ JITTER-BLOCK: 0x${blockID} | INT:${integrity}% | RATIO:${payload.cr} ]`;
+    const plainBadge = `\n\n[ JITTER-BLOCK: 0x${blockID} | INT:${integrity}% ]`;
 
     const data = [new ClipboardItem({ 'text/html': new Blob([htmlBadge], {type:'text/html'}), 'text/plain': new Blob([plainBadge], {type:'text/plain'}) })];
 

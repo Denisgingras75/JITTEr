@@ -67,10 +67,6 @@ function renderCertificate(data) {
         <div class="metric-value">${formatNumber(data.alienChars)}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Biometric Jitter</div>
-        <div class="metric-value">${data.jitter}ms</div>
-      </div>
-      <div class="metric">
         <div class="metric-label">Word Count</div>
         <div class="metric-value">${formatNumber(data.wordCount || 0)}</div>
       </div>
@@ -155,6 +151,5 @@ function formatDuration(ms) {
     return;
   }
 
-  console.log('[Anvil Verifier] Badge data:', badgeData);
   renderCertificate(badgeData);
 })();

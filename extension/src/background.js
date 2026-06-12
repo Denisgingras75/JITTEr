@@ -20,6 +20,10 @@ chrome.action.onClicked.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Only act on messages from this extension's own contexts (content scripts,
+  // popup). Defense-in-depth: there is no externally_connectable, so web pages
+  // and other extensions cannot reach this listener regardless.
+  if (!sender || sender.id !== chrome.runtime.id) return;
   if (request.action === 'openWriter') {
     openWriter();
   }
