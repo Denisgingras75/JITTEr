@@ -7,7 +7,7 @@
 // Run: node tests/scorer-parity.test.mjs   (Node ≥22.18 strips TS types natively)
 
 import { _testExports } from '../sdk/src/core/jitter-box.js'
-import { scoreRaw as serverScoreRaw, applyTimeCap } from '../supabase/functions/_shared/scorer.ts'
+import { scoreRaw as serverScoreRaw, applyTimeCap, timeCapForDays } from '../supabase/functions/_shared/scorer.ts'
 
 const clientScoreRaw = _testExports.scoreRaw
 
@@ -214,6 +214,36 @@ console.log('\nTime cap semantics:')
     prev = r.timeCap
   }
   check('cap curve is monotonic and saturates at 1.0', monotonic && prev === 1.0)
+}
+
+// ── Documented band conformance (JITTER-PLAN.md) ─────────────────────────────
+// These pin applyTimeCap to the spec's step function. If anyone reverts to the
+// legacy log curve, every interior band fails loudly.
+console.log('\nTime cap band conformance (JITTER-PLAN.md):')
+{
+  const DAY = 86400000
+  const now = Date.UTC(2026, 5, 11)
+  const BANDS = [
+    [0,   0.35], [0.5, 0.35],
+    [1,   0.50], [3,   0.50], [6.9, 0.50],
+    [7,   0.65], [14,  0.65], [29,  0.65],
+    [30,  0.80], [60,  0.80], [89,  0.80],
+    [90,  0.92], [135, 0.92], [179, 0.92],
+    [180, 1.00], [365, 1.00],
+  ]
+  let allMatch = true
+  let detail = ''
+  for (const [days, expected] of BANDS) {
+    const got = timeCapForDays(days)
+    if (got !== expected) { allMatch = false; if (!detail) detail = `day ${days}: expected ${expected}, got ${got}` }
+  }
+  check('cap matches every documented band exactly', allMatch, detail)
+
+  // The bug this guards against: at day 30 the legacy log curve gave 0.58,
+  // wrongly capping a verified-quality author below the 0.80 'verified' line.
+  const day30 = applyTimeCap({ war: 0.85, raw_war: 0.85, classification: 'verified', flags: [] }, now - 30 * DAY, now)
+  check('30-day verified author reaches verified (not held at suspicious)',
+    day30.war === 0.80 && day30.classification === 'verified', JSON.stringify(day30))
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

@@ -101,7 +101,9 @@ Layer 3 -- Passport card modal (click the badge)
   Full profile: THIS SESSION + CAREER PROFILE
   WAR score headline. Career stats grid. Session stats below.
 
-**WAR Formula (0-10 scale):**
+**WAR Formula (display 0-10; engine + storage use 0-1, ×10 for display):**
+  (10-signal set per docs/plans/2026-03-07-war-hardening-design.md — the
+   approved spec the shipped engines run. Supersedes the older 9-signal table.)
   bigram_rhythm    0.18   CV of bigram means (human finger patterns)
   per_key          0.15   CV of per-key dwells (fingerprint)
   cross_signal     0.15   Pearson flow-coupling + pause warmup + fatigue
@@ -109,16 +111,28 @@ Layer 3 -- Passport card modal (click the badge)
   inter_key_var    0.10   Std dev of flight times (bots are flat)
   dwell_std        0.10   Std dev of key hold duration
   mean_dwell       0.08   Average key hold time (bots < 27ms)
-  editing          0.07   Edit ratio + pause freq (bots never edit)
-  purity           0.05   Typed vs weighted paste
+  editing          0.05   Edit ratio + pause freq (bots never edit)
+  dwell_uniformity 0.04   CV of per-key dwell (10th signal, hardening pass)
+  purity           0.03   Typed vs weighted paste
+  (sum = 1.00)
+
+  Hard floors (instant WAR 0): mean_dwell<27ms · std_inter_key<9ms · mean_inter_key<54ms
+  Soft penalties: bigram_uniform/per_key_uniformity -0.08 · dwell_std_hard -0.06
+                  no_editing_behavior/non_lognormal -0.05
 
 **Time confidence cap (THE ECONOMIC THESIS IN CODE):**
+  Step schedule, applied SERVER-SIDE on the DB's true first_seen. Caps the
+  PENALIZED war (penalties survive the cap). Verified-quality typing under a
+  young passport classifies as 'building' (Building Trust), never 'bot'.
   < 1 day     -> max WAR 0.35
   1-7 days    -> max WAR 0.50
   7-30 days   -> max WAR 0.65
   30-90 days  -> max WAR 0.80
   90-180 days -> max WAR 0.92
   180+ days   -> max WAR 1.00
+  NOTE: this is a step function. Do NOT approximate it with a log curve — the
+  curve under-caps mid-range (day 30 -> 0.58 vs 0.80) and holds mature authors
+  at Suspicious. Enforced by tests/scorer-parity.test.mjs.
 
 **Paste weighting (transparent, not punished):**
   < 50 chars  -> 0.1x alien weight  (URL, name -- noise)

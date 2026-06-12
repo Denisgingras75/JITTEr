@@ -568,17 +568,25 @@ function scoreWAR(session, profile) {
   return { war, raw_war, tier, components, flags, timeCap: 1.0 };
 }
 
-// Time confidence cap — the economic thesis in code
-// Day 0 = max 0.35, scales logarithmically to 1.0 at 180+ days
+// Time confidence cap — the economic thesis in code.
+// Step schedule from JITTER-PLAN.md (the canonical bands), NOT a log curve:
+//   <1d 0.35 · 1–7d 0.50 · 7–30d 0.65 · 30–90d 0.80 · 90–180d 0.92 · 180d+ 1.00
+// The earlier log curve under-capped by up to 0.23 WAR mid-range (e.g. day 30
+// gave 0.58 vs the spec's 0.80), wrongly holding mature authors at Suspicious.
+// The cap is applied to the PENALIZED war so paste/uniformity penalties survive
+// it — capping raw_war (the old behavior) silently erased them when cap > raw.
+function timeCapForDays(days) {
+  if (days < 1) return 0.35;
+  if (days < 7) return 0.50;
+  if (days < 30) return 0.65;
+  if (days < 90) return 0.80;
+  if (days < 180) return 0.92;
+  return 1.00;
+}
 function applyTimeCap(warResult, firstSeenMs) {
-  if (!firstSeenMs) {
-    warResult.war = Math.min(warResult.raw_war, 0.35);
-    warResult.timeCap = 0.35;
-    return warResult;
-  }
-  const days = Math.max(0, (Date.now() - firstSeenMs) / 86400000);
-  const cap = Math.min(1.0, round2(0.35 + 0.65 * Math.log(1 + days / 30) / Math.log(7)));
-  warResult.war = round2(Math.min(warResult.raw_war, cap));
+  const days = !firstSeenMs ? 0 : Math.max(0, (Date.now() - firstSeenMs) / 86400000);
+  const cap = timeCapForDays(days);
+  warResult.war = round2(Math.min(warResult.war, cap));
   warResult.timeCap = cap;
   warResult.tier = WAR_TIERS.find(([min]) => warResult.war >= min)[1];
   return warResult;

@@ -299,7 +299,17 @@ function classify(war: number): string {
 
 // ── Time confidence cap ──────────────────────────────────────────────────────
 // The economic thesis, applied SERVER-SIDE with the true first_seen from the DB.
-// Day 0 caps confidence at 0.35, scaling logarithmically to 1.0 at ~180 days.
+//
+// The cap schedule is the STEP FUNCTION specified in JITTER-PLAN.md ("Time
+// confidence cap — THE ECONOMIC THESIS IN CODE"), NOT the log curve the legacy
+// biometrics.js shipped. The log curve under-caps by up to 0.23 WAR in the
+// middle of the range (e.g. day 30: curve 0.58 vs spec 0.80), which would
+// wrongly hold mature-enough authors at 'suspicious'. The bands are the
+// canonical IP claim, so they are the source of truth here.
+//
+//   < 1 day      → 0.35      30–90 days  → 0.80
+//   1–7 days     → 0.50      90–180 days → 0.92
+//   7–30 days    → 0.65      180+ days   → 1.00
 //
 // Semantics (deliberate):
 //   * The cap limits CONFIDENCE, not the verdict on the typing itself.
@@ -313,14 +323,20 @@ function classify(war: number): string {
 //     and uniformity penalties must survive the cap.
 //
 // nowMs is injectable for tests.
+export function timeCapForDays(days: number): number {
+  if (days < 1) return 0.35
+  if (days < 7) return 0.50
+  if (days < 30) return 0.65
+  if (days < 90) return 0.80
+  if (days < 180) return 0.92
+  return 1.00
+}
+
 export function applyTimeCap(s: Scored, firstSeenMs: number | null, nowMs: number = Date.now()): Scored {
-  let cap: number
-  if (!firstSeenMs) {
-    cap = 0.35
-  } else {
-    const days = Math.max(0, (nowMs - firstSeenMs) / 86400000)
-    cap = Math.min(1.0, round2(0.35 + 0.65 * Math.log(1 + days / 30) / Math.log(7)))
-  }
+  // No passport on record → treat as day 0 (the worst case for the author, the
+  // safest for the system). first_seen is set on the very first attestation.
+  const days = firstSeenMs == null ? 0 : Math.max(0, (nowMs - firstSeenMs) / 86400000)
+  const cap = timeCapForDays(days)
 
   const war = round2(Math.min(s.war, cap))
   const tier = tierFor(war)
