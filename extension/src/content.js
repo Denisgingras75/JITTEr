@@ -315,6 +315,8 @@ async function copyBadge(s, a) {
     let publicKeyJwk = null;
     let previousBadgeHash = null;
     if (typeof CryptoUtils !== 'undefined') {
+        // Ensure key pair exists before reading fingerprint/JWK
+        await CryptoUtils.getOrCreateKeyPair();
         publicKeyFingerprint = await CryptoUtils.getPublicKeyFingerprint();
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();

@@ -404,14 +404,14 @@
             <input type="email" class="auth-input" id="auth-email-input" placeholder="Email">
             <input type="password" class="auth-input" id="auth-password-input" placeholder="Password">
             <div class="auth-error" id="auth-error"></div>
-            <button class="btn btn-primary" onclick="AuthUtils.handleLoginSubmit()">
+            <button class="btn btn-primary" id="auth-submit-btn">
                 <span id="auth-submit-text">LOGIN</span>
             </button>
             <div class="auth-toggle">
-                <input type="checkbox" id="auth-mode-toggle" onchange="toggleAuthMode()">
+                <input type="checkbox" id="auth-mode-toggle">
                 <label for="auth-mode-toggle">New user? Sign up instead</label>
             </div>
-            <button class="btn" style="margin-top:20px;" onclick="AuthUtils.hideLoginModal()">CANCEL</button>
+            <button class="btn" style="margin-top:20px;" id="auth-cancel-btn">CANCEL</button>
         </div>
     </div>
 
@@ -425,12 +425,11 @@
             <span id="replay-time">T+0:00</span>
             <span id="replay-paste-indicator">📋 PASTE EVENT</span>
             <span id="replay-blur-indicator"></span>
-            <button id="replay-close-btn" onclick="document.getElementById('replay-panel').style.display='none'">✕ CLOSE</button>
+            <button id="replay-close-btn">✕ CLOSE</button>
         </div>
         <div id="replay-controls">
-            <button id="replay-play-btn" onclick="toggleReplayPlayback()">▶ PLAY</button>
-            <input type="range" id="replay-scrubber" min="0" max="0" value="0"
-                oninput="renderReplay(parseInt(this.value))">
+            <button id="replay-play-btn">▶ PLAY</button>
+            <input type="range" id="replay-scrubber" min="0" max="0" value="0">
             <span style="color:#666; font-size:11px; font-family:monospace; white-space:nowrap;">
                 DRAG TO SCRUB
             </span>
@@ -439,23 +438,13 @@
     </div>
 
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
-    <script src="crypto-utils.js"></script>
-    <script src="passport-utils.js"></script>
-    <script src="auth-utils.js"></script>
-    <script src="biometrics.js"></script>
-    <script src="writer.js"></script>
+    <!-- Cloud sync (auth-utils.js) is not loaded: it needs the Firebase SDK, which MV3 blocks. -->
+    <script src="src/crypto-utils.js"></script>
+    <script src="src/passport-utils.js"></script>
+    <script src="src/biometrics.js"></script>
+    <script src="src/writer.js"></script>
+    <script src="src/writer-page.js"></script>
 
-    <script>
-        // Toggle between login and signup mode
-        function toggleAuthMode() {
-            const isSignup = document.getElementById('auth-mode-toggle').checked;
-            const submitText = document.getElementById('auth-submit-text');
-            submitText.innerText = isSignup ? 'SIGN UP' : 'LOGIN';
-        }
-    </script>
 </body>
 </html>

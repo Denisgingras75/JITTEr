@@ -1,7 +1,10 @@
 const { defineConfig } = require('@playwright/test');
 
+// Run with `npm run test:e2e`. Playwright's own Chromium is used unless
+// JITTER_CHROME points at another browser binary.
 module.exports = defineConfig({
   testDir: './tests',
+  testMatch: '**/*.spec.js', // *.test.js files are plain Node scripts (npm run test:unit)
   timeout: 60000,
   retries: 0,
   use: {
@@ -15,9 +18,9 @@ module.exports = defineConfig({
       name: 'chromium',
       use: {
         browserName: 'chromium',
-        launchOptions: {
-          executablePath: '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',
-        },
+        launchOptions: process.env.JITTER_CHROME
+          ? { executablePath: process.env.JITTER_CHROME }
+          : {},
       },
     },
   ],

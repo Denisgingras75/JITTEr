@@ -58,11 +58,11 @@ test.describe('Teacher Verification Flow', () => {
     // Risk badge should be LOW (honest student)
     await expect(result).toContainText('LOW RISK');
 
-    // Session metrics grid
+    // Session metrics grid (WAR layout, shown when the badge carries a WAR score)
+    await expect(result).toContainText('WAR Score');
+    await expect(result).toContainText('Time Cap');
     await expect(result).toContainText('Session Integrity');
-    await expect(result).toContainText('Cognitive Ratio');
     await expect(result).toContainText('Total Keystrokes');
-    await expect(result).toContainText('Account Age');
 
     // Session details section
     await expect(result).toContainText('SESSION DETAILS');

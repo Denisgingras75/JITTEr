@@ -35,10 +35,7 @@ test.describe('Badge Chain Integrity', () => {
       // Simulate new session without full reset (keep passport + crypto)
       session.humanChars = 0;
       session.alienChars = 0;
-      bio.flowIntervals = [];
-      bio.gapIntervals = [];
-      bio.lastTime = null;
-      bio.backspaces = 0;
+      bioSession = JitterBio.createSession();
       document.getElementById('editor').innerHTML = '';
     });
 

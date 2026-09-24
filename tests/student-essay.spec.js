@@ -94,7 +94,7 @@ test.describe('Student Essay Flow', () => {
     expect(base64).toBeTruthy();
 
     const payload = JSON.parse(atob(base64));
-    expect(payload.version).toBe('2.0');
+    expect(payload.version).toBe('3.0');
     expect(payload.purity).toBeGreaterThanOrEqual(95);
     expect(payload.integrity).toBeGreaterThan(0);
     expect(payload.keys).toBeGreaterThan(0);

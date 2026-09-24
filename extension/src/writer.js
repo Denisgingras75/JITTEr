@@ -323,6 +323,8 @@ async function exportBadge() {
 
     let publicKeyJwk = null;
     if (typeof CryptoUtils !== 'undefined') {
+        // Ensure key pair exists before reading fingerprint/JWK
+        await CryptoUtils.getOrCreateKeyPair();
         publicKeyFingerprint = await CryptoUtils.getPublicKeyFingerprint();
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
@@ -480,7 +482,8 @@ async function exportLedger() {
 function openReplay() {
     const panel = document.getElementById('replay-panel');
     if (!panel) return;
-    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    const isHidden = !panel.style.display || panel.style.display === 'none';
+    panel.style.display = isHidden ? 'flex' : 'none';
     if (panel.style.display === 'flex') {
         renderReplay(0);
         // Update scrubber max
