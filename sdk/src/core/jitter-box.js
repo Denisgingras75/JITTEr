@@ -415,10 +415,13 @@ function attach(el) {
   function onKeydown(e) {
     var now = performance.now()
 
+    // Page scripts can dispatch KeyboardEvents; only real input counts.
+    if (!e.isTrusted || e.repeat || typeof e.key !== 'string') return
     if (e.ctrlKey || e.metaKey || e.altKey) return
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
       data.backspaceCount++
+      lastDeleteKeyTime = now
       return
     }
 
@@ -476,6 +479,7 @@ function attach(el) {
   function onKeyup(e) {
     var now = performance.now()
 
+    if (!e.isTrusted || typeof e.key !== 'string') return
     if (e.ctrlKey || e.metaKey || e.altKey) return
     if (EDITING_KEYS.has(e.key)) return
     if (e.key.length !== 1) return
@@ -501,11 +505,13 @@ function attach(el) {
   }
 
   function onPaste(e) {
+    if (!e.isTrusted) return
     var pasted = e.clipboardData ? e.clipboardData.getData('text') : ''
     if (pasted.length > 0) data.alienChars += pasted.length
   }
 
   function onMouseMove(e) {
+    if (!e.isTrusted) return
     var now = performance.now()
     if (now - data.lastMouseSampleTime < MOUSE_SAMPLE_INTERVAL) return
     data.lastMouseSampleTime = now
@@ -520,14 +526,18 @@ function attach(el) {
 
   var lastInputTime = 0
   var lastInputLength = 0
+  var lastDeleteKeyTime = 0
 
-  function onInput() {
+  function onInput(e) {
+    if (e && !e.isTrusted) return
     var now = performance.now()
     var currentLength = el.value ? el.value.length : 0
 
-    // Deletion
+    // Deletion (onKeydown already counted it when a Backspace/Delete key fired)
     if (currentLength < lastInputLength) {
-      data.backspaceCount += (lastInputLength - currentLength)
+      if (!(lastDeleteKeyTime > 0 && now - lastDeleteKeyTime < 50)) {
+        data.backspaceCount += (lastInputLength - currentLength)
+      }
       lastInputLength = currentLength
       lastInputTime = now
       return
@@ -692,6 +702,9 @@ function attach(el) {
      */
     reset: function () {
       data = createData()
+      lastInputLength = el.value ? el.value.length : 0
+      lastInputTime = 0
+      lastDeleteKeyTime = 0
     },
 
     /**

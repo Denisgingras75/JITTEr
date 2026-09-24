@@ -8,7 +8,7 @@
   "scripts": {
     "build": "node build.js",
     "dev": "npx serve examples -p 3333",
-    "test": "node tests/core.test.js"
+    "test": "cd .. && node tests/sdk.test.js && node tests/wgh-widget.test.js && node tests/bot-battery.test.js"
   },
   "keywords": ["biometrics", "typing", "identity", "widget", "content-provenance"],
   "author": "Denis Gingras",

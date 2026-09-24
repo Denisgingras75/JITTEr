@@ -1,6 +1,6 @@
 # Build artifacts
 *.zip
-sdk/dist/
+sdk/examples/jitter.min.js
 node_modules/
 
 # OS files

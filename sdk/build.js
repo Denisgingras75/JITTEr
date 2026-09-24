@@ -27,7 +27,12 @@ init = init
 
 var output = ';(function() {\n"use strict";\n\n'
   + '// ── Jitter Core ─────────────────────────────────────\n'
-  + core + '\n\n'
+  // The core and init.js both declare attach(); in one shared scope the later
+  // declaration won and JitterBox.attach called itself forever.
+  + 'var JitterBox = (function () {\n'
+  + core + '\n'
+  + 'return JitterBox\n'
+  + '})()\n\n'
   + '// ── Jitter Badge ────────────────────────────────────\n'
   + badge + '\n\n'
   + '// ── Jitter SDK ──────────────────────────────────────\n'
