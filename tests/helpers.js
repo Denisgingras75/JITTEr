@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const PROJECT_DIR = path.resolve(__dirname, '..');
+const PROJECT_DIR = path.resolve(__dirname, '..', 'extension');
 const CHROME_MOCK = fs.readFileSync(path.join(__dirname, 'chrome-mock.js'), 'utf8');
 
 /**
@@ -19,6 +19,13 @@ async function openWriter(page) {
     status: 200,
     contentType: 'application/javascript',
     body: '// googleapis mock',
+  }));
+
+  // The attestation server is not part of these tests
+  await page.route('https://*.supabase.co/**', route => route.fulfill({
+    status: 503,
+    contentType: 'application/json',
+    body: '{"error":"unavailable in tests"}',
   }));
 
   // Inject Chrome mock before any script runs

@@ -1,13 +1,21 @@
 /**
- * jitter-box.js — Standalone keystroke biometrics widget
+ * jitter-box.js — Standalone keystroke biometrics widget (SDK core)
  * Zero dependencies. Zero UI. Attach to any textarea, get a WAR badge on submit.
+ *
+ * CAPTURE lives here. The SCORING MATH lives in extension/src/war-score.js,
+ * the one canonical engine shared with the Chrome extension and the lab.
+ * sdk/build.js concatenates that file ahead of this one, so inside the bundle
+ * `JitterWAR` is already in scope; loaded as a module (Node, tests) it is
+ * imported below. Change the formula there, never here.
  *
  * Usage:
  *   const jb = JitterBox.attach(document.querySelector('textarea'))
  *   // user types naturally...
- *   const badge = jb.score()   // => { war: 0.92, classification: 'human', ... }
+ *   const badge = jb.score()   // => { war: 0.92, classification: 'verified', ... }
  *   jb.detach()                // cleanup listeners
  */
+
+import JitterWAR from '../../../extension/src/war-score.js'
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -37,110 +45,12 @@ const TRACKED_BIGRAMS = new Set([
   'st', 'to', 'nt', 'ng', 'se', 'ha', 'as', 'ou', 'io', 'le',
 ])
 
-// WAR v2: signal ramps [bot_floor, human_zone] and weights
-var RAMPS = {
-  bigram_rhythm:    [0.08, 0.20],
-  per_key:          [0.09, 0.25],
-  inter_key_var:    [9, 45],
-  dwell_std:        [8, 20],
-  mean_dwell:       [27, 80],
-  edit_ratio:       [0.03, 0.08],
-  pause_freq:       [0.4, 1.5],
-  purity:           [0, 1],
-  ks_shape:         [0.25, 0.08],
-  dwell_uniformity: [0.09, 0.25],
-}
-var WEIGHTS = {
-  bigram_rhythm: 0.18, per_key: 0.15, cross_signal: 0.15, distribution_shape: 0.12,
-  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.05,
-  dwell_uniformity: 0.04, purity: 0.03,
-}
+// ── Math helpers (shared with the engine) ──────────────────────────────
 
-// ── Math helpers ───────────────────────────────────────────────────────
-
-function mean(arr) {
-  if (arr.length === 0) return 0
-  var sum = 0
-  for (var i = 0; i < arr.length; i++) sum += arr[i]
-  return sum / arr.length
-}
-
-function std(arr) {
-  if (arr.length < 2) return 0
-  var m = mean(arr)
-  var variance = 0
-  for (var i = 0; i < arr.length; i++) variance += (arr[i] - m) * (arr[i] - m)
-  return Math.sqrt(variance / arr.length)
-}
-
-function round2(n) { return Math.round(n * 100) / 100 }
-function round3(n) { return Math.round(n * 1000) / 1000 }
-function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v }
-
-function rampScore(raw, floor, ceiling) {
-  if (floor < ceiling) return clamp01((raw - floor) / (ceiling - floor))
-  return clamp01((floor - raw) / (floor - ceiling)) // inverted (K-S: lower = better)
-}
-
-// ── Statistical tests ──────────────────────────────────────────────────
-
-// Standard normal CDF approximation (Abramowitz & Stegun)
-function normalCDF(z) {
-  if (z < -6) return 0
-  if (z > 6) return 1
-  var sign = z < 0 ? -1 : 1
-  z = Math.abs(z)
-  var t = 1 / (1 + 0.2316419 * z)
-  var d = 0.3989422804014327 * Math.exp(-z * z / 2)
-  var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.8212560 + t * 1.3302744))))
-  return sign === 1 ? 1 - p : p
-}
-
-// Kolmogorov-Smirnov: compare empirical CDF to log-normal fit
-function ksStatistic(values) {
-  if (values.length < 10) return 0.5
-
-  var logs = []
-  for (var i = 0; i < values.length; i++) {
-    if (values[i] > 0) logs.push(Math.log(values[i]))
-  }
-  if (logs.length < 10) return 0.5
-
-  var mu = mean(logs)
-  var sigma = std(logs)
-  if (sigma === 0) return 1.0
-
-  var sorted = values.slice().sort(function (a, b) { return a - b })
-  var n = sorted.length
-  var maxDiff = 0
-
-  for (var j = 0; j < n; j++) {
-    var empirical = (j + 1) / n
-    var z = (Math.log(sorted[j]) - mu) / sigma
-    var theoretical = normalCDF(z)
-    var diff = Math.abs(empirical - theoretical)
-    if (diff > maxDiff) maxDiff = diff
-  }
-
-  return round3(maxDiff)
-}
-
-// Pearson correlation coefficient
-function pearsonR(a, b) {
-  if (a.length < 3 || a.length !== b.length) return 0
-  var ma = mean(a)
-  var mb = mean(b)
-  var num = 0, da = 0, db = 0
-  for (var i = 0; i < a.length; i++) {
-    var ai = a[i] - ma
-    var bi = b[i] - mb
-    num += ai * bi
-    da += ai * ai
-    db += bi * bi
-  }
-  var denom = Math.sqrt(da * db)
-  return denom > 0 ? num / denom : 0
-}
+var mean = JitterWAR.mean
+var std = JitterWAR.std
+var round2 = JitterWAR.round2
+var round3 = JitterWAR.round3
 
 // ── Mouse path analysis ────────────────────────────────────────────────
 
@@ -168,221 +78,14 @@ function computeMousePath(positions) {
   return { linearity: linearity, avgSpeed: avgSpeed }
 }
 
-// ── WAR Scorer (9-signal weighted composite) ───────────────────────────
-
-function scoreProfile(profile, captureData) {
-  if (!profile) return { war: 1.0, classification: 'verified', components: {}, flags: [] }
-
-  var flags = []
-
-  // === LAYER 1: Hard floors — instant WAR = 0 ===
-  var hasHardFloor =
-    (profile.mean_dwell != null && profile.mean_dwell < 27) ||
-    (profile.std_inter_key != null && profile.std_inter_key < 9) ||
-    (profile.mean_inter_key != null && profile.mean_inter_key < 54)
-
-  if (hasHardFloor) {
-    if (profile.mean_dwell != null && profile.mean_dwell < 27) flags.push('dwell_floor')
-    if (profile.std_inter_key != null && profile.std_inter_key < 9) flags.push('variance_floor')
-    if (profile.mean_inter_key != null && profile.mean_inter_key < 54) flags.push('iki_floor')
-    return { war: 0, classification: 'bot', components: {}, flags: flags }
-  }
-
-  // === LAYER 3: Weighted signals ===
-  var components = {}
-
-  // 1. Bigram rhythm
-  var sigs = profile.bigram_signatures || {}
-  var bigramKeys = Object.keys(sigs)
-  if (bigramKeys.length >= 4) {
-    var bigramMeans = []
-    for (var i = 0; i < bigramKeys.length; i++) bigramMeans.push(sigs[bigramKeys[i]].mean)
-    var bigramM = mean(bigramMeans)
-    var bigramCv = bigramM > 0 ? std(bigramMeans) / bigramM : 0
-    components.bigram_rhythm = rampScore(bigramCv, RAMPS.bigram_rhythm[0], RAMPS.bigram_rhythm[1])
-    if (bigramCv < 0.08) flags.push('bigram_uniform')
-  } else {
-    components.bigram_rhythm = 0.5
-  }
-
-  // 2. Per-key uniqueness
-  var perKeyValues = []
-  var pkd = profile.per_key_dwell || {}
-  var pkKeys = Object.keys(pkd)
-  for (var j = 0; j < pkKeys.length; j++) perKeyValues.push(pkd[pkKeys[j]])
-  if (perKeyValues.length >= 3) {
-    var pkMean = mean(perKeyValues)
-    var pkCv = pkMean > 0 ? std(perKeyValues) / pkMean : 0
-    components.per_key = rampScore(pkCv, RAMPS.per_key[0], RAMPS.per_key[1])
-    if (pkCv < 0.09) flags.push('per_key_uniformity')
-  } else {
-    components.per_key = 0.5
-  }
-
-  // 3. Cross-signal
-  components.cross_signal = scoreCrossSignal(captureData || {})
-
-  // 4. Distribution shape (K-S test)
-  if (captureData && captureData.flightTimes && captureData.flightTimes.length >= 10) {
-    var ks = ksStatistic(captureData.flightTimes)
-    components.distribution_shape = rampScore(ks, RAMPS.ks_shape[0], RAMPS.ks_shape[1])
-    if (ks > 0.25) flags.push('non_lognormal')
-  } else {
-    components.distribution_shape = 0.5
-  }
-
-  // 5. Inter-key variance
-  if (profile.std_inter_key != null) {
-    components.inter_key_var = rampScore(profile.std_inter_key, RAMPS.inter_key_var[0], RAMPS.inter_key_var[1])
-  } else {
-    components.inter_key_var = 0.5
-  }
-
-  // 6. Dwell std
-  if (profile.std_dwell != null) {
-    components.dwell_std = rampScore(profile.std_dwell, RAMPS.dwell_std[0], RAMPS.dwell_std[1])
-    if (profile.std_dwell < 8) flags.push('dwell_std_hard')
-  } else {
-    components.dwell_std = 0.5
-  }
-
-  // 7. Mean dwell
-  if (profile.mean_dwell != null) {
-    components.mean_dwell = rampScore(profile.mean_dwell, RAMPS.mean_dwell[0], RAMPS.mean_dwell[1])
-  } else {
-    components.mean_dwell = 0.5
-  }
-
-  // 8. Editing behavior
-  var editSub = profile.edit_ratio != null
-    ? rampScore(profile.edit_ratio, RAMPS.edit_ratio[0], RAMPS.edit_ratio[1]) : 0.5
-  var pauseSub = profile.pause_freq != null
-    ? rampScore(profile.pause_freq, RAMPS.pause_freq[0], RAMPS.pause_freq[1]) : 0.5
-  components.editing = (editSub + pauseSub) / 2
-  if (profile.edit_ratio != null && profile.pause_freq != null &&
-      profile.edit_ratio < 0.03 && profile.pause_freq < 0.4) {
-    flags.push('no_editing_behavior')
-  }
-
-  // 9. Dwell uniformity (NEW — 10th signal)
-  if (perKeyValues.length >= 3) {
-    var duMean = mean(perKeyValues)
-    var duCv = duMean > 0 ? std(perKeyValues) / duMean : 0
-    components.dwell_uniformity = rampScore(duCv, RAMPS.dwell_uniformity[0], RAMPS.dwell_uniformity[1])
-  } else {
-    components.dwell_uniformity = 0.5
-  }
-
-  // 10. Purity — paste detection
-  var total = (captureData && (captureData.humanChars + captureData.alienChars)) || 0
-  var pasteRatio = total > 0 ? (captureData ? captureData.alienChars / total : 0) : 0
-  if (total >= MIN_CHARS_FOR_SCORE && captureData) {
-    components.purity = rampScore(captureData.humanChars / total, RAMPS.purity[0], RAMPS.purity[1])
-    if (pasteRatio > 0.50) flags.push('paste_heavy')
-    if (pasteRatio > 0.90) flags.push('paste_flood')
-  } else {
-    components.purity = 0.5
-  }
-
-  // Weighted sum (no workaround needed — keys match component names)
-  var raw_war = 0
-  var weightKeys = Object.keys(WEIGHTS)
-  for (var w = 0; w < weightKeys.length; w++) {
-    var wk = weightKeys[w]
-    raw_war += WEIGHTS[wk] * (components[wk] != null ? components[wk] : 0.5)
-  }
-  raw_war = round2(raw_war)
-
-  // === LAYER 2: Soft penalties ===
-  var PENALTIES = {
-    bigram_uniform: 0.08,
-    per_key_uniformity: 0.08,
-    dwell_std_hard: 0.06,
-    paste_heavy: 0.15,
-    no_editing_behavior: 0.05,
-    non_lognormal: 0.05,
-    paste_flood: 0.30,
-  }
-
-  var penalty = 0
-  for (var p = 0; p < flags.length; p++) {
-    if (PENALTIES[flags[p]]) penalty += PENALTIES[flags[p]]
-  }
-
-  var war = round2(Math.max(0, raw_war - penalty))
-
-  // Purity multiplier — paste ratio directly scales WAR down
-  if (total > 0 && pasteRatio > 0.10) {
-    var purityMult = Math.max(0, 1 - pasteRatio)
-    war = round2(war * purityMult)
-  }
-
-  var classification
-  if (war >= 0.80) classification = 'verified'
-  else if (war >= 0.50) classification = 'suspicious'
-  else classification = 'bot'
-
-  return { war: war, raw_war: raw_war, classification: classification, components: components, flags: flags }
-}
-
-// Cross-signal correlation scorer (3 sub-tests)
-function scoreCrossSignal(captureData) {
-  var score = 0
-  var tests = 0
-
-  // Sub-test 1: Pause-warmup — after gap, next keystrokes slower?
-  if (captureData.flightTimes && captureData.flightTimes.length >= 20) {
-    var flights = captureData.flightTimes
-    var avgFlight = mean(flights)
-    var pauseWarmups = 0
-    var pauseHits = 0
-    for (var i = 1; i < flights.length - 3; i++) {
-      if (flights[i] > PAUSE_THRESHOLD_MS * 0.5) {
-        pauseHits++
-        var nextAvg = (flights[i + 1] + flights[i + 2] + flights[i + 3]) / 3
-        if (nextAvg > avgFlight) pauseWarmups++
-      }
-    }
-    score += pauseHits >= 1 ? (pauseWarmups / pauseHits > 0.5 ? 1 : 0) : 0.5
-    tests++
-  }
-
-  // Sub-test 2: Flow coupling — inter-key speed correlates with dwell
-  if (captureData.flightTimes && captureData.dwellTimes &&
-      captureData.flightTimes.length >= 20 && captureData.dwellTimes.length >= 20) {
-    var flightW = []
-    var dwellW = []
-    var minLen = Math.min(captureData.flightTimes.length, captureData.dwellTimes.length)
-    var ws = 10
-    for (var k = 0; k + ws <= minLen; k += ws) {
-      flightW.push(mean(captureData.flightTimes.slice(k, k + ws)))
-      dwellW.push(mean(captureData.dwellTimes.slice(k, k + ws)))
-    }
-    if (flightW.length >= 3) {
-      var r = pearsonR(flightW, dwellW)
-      score += r > 0.3 ? 1 : r > 0 ? 0.5 : 0
-    } else {
-      score += 0.5
-    }
-    tests++
-  }
-
-  // Sub-test 3: Fatigue slope — typing slows over time
-  if (captureData.fatigueWindows && captureData.fatigueWindows.length >= 3) {
-    var fw = captureData.fatigueWindows
-    score += fw[fw.length - 1] - fw[0] > 0 ? 1 : 0
-    tests++
-  }
-
-  return tests > 0 ? round2(score / tests) : 0.5
-}
-
 // ── JitterBox ──────────────────────────────────────────────────────────
 
 function createData() {
   return {
     humanChars: 0,
     alienChars: 0,
+    pasteCount: 0,
+    pasteLengths: [],      // one entry per paste event: the engine weights by length
     flightTimes: [],
     dwellTimes: [],
     ddTimes: [],
@@ -415,10 +118,13 @@ function attach(el) {
   function onKeydown(e) {
     var now = performance.now()
 
+    // Page scripts can dispatch KeyboardEvents; only real input counts.
+    if (!e.isTrusted || e.repeat || typeof e.key !== 'string') return
     if (e.ctrlKey || e.metaKey || e.altKey) return
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
       data.backspaceCount++
+      lastDeleteKeyTime = now
       return
     }
 
@@ -476,6 +182,7 @@ function attach(el) {
   function onKeyup(e) {
     var now = performance.now()
 
+    if (!e.isTrusted || typeof e.key !== 'string') return
     if (e.ctrlKey || e.metaKey || e.altKey) return
     if (EDITING_KEYS.has(e.key)) return
     if (e.key.length !== 1) return
@@ -501,11 +208,19 @@ function attach(el) {
   }
 
   function onPaste(e) {
+    if (!e.isTrusted) return
     var pasted = e.clipboardData ? e.clipboardData.getData('text') : ''
-    if (pasted.length > 0) data.alienChars += pasted.length
+    if (pasted.length > 0) {
+      // Length only, never the text (Hard Rule #1). One entry per event so the
+      // engine can weight a pasted URL differently from a pasted paragraph.
+      data.alienChars += pasted.length
+      data.pasteCount++
+      data.pasteLengths.push(pasted.length)
+    }
   }
 
   function onMouseMove(e) {
+    if (!e.isTrusted) return
     var now = performance.now()
     if (now - data.lastMouseSampleTime < MOUSE_SAMPLE_INTERVAL) return
     data.lastMouseSampleTime = now
@@ -520,14 +235,18 @@ function attach(el) {
 
   var lastInputTime = 0
   var lastInputLength = 0
+  var lastDeleteKeyTime = 0
 
-  function onInput() {
+  function onInput(e) {
+    if (e && !e.isTrusted) return
     var now = performance.now()
     var currentLength = el.value ? el.value.length : 0
 
-    // Deletion
+    // Deletion (onKeydown already counted it when a Backspace/Delete key fired)
     if (currentLength < lastInputLength) {
-      data.backspaceCount += (lastInputLength - currentLength)
+      if (!(lastDeleteKeyTime > 0 && now - lastDeleteKeyTime < 50)) {
+        data.backspaceCount += (lastInputLength - currentLength)
+      }
       lastInputLength = currentLength
       lastInputTime = now
       return
@@ -560,10 +279,7 @@ function attach(el) {
         // Fatigue windows
         if (data.totalKeystrokes > 0 && data.totalKeystrokes % 25 === 0) {
           var recent = data.flightTimes.slice(-25)
-          var avg = 0
-          for (var j = 0; j < recent.length; j++) avg += recent[j]
-          avg = avg / recent.length
-          data.fatigueWindows.push(round2(avg))
+          data.fatigueWindows.push(round2(mean(recent)))
           if (data.fatigueWindows.length > FATIGUE_WINDOW_COUNT) data.fatigueWindows.shift()
         }
       }
@@ -606,7 +322,8 @@ function attach(el) {
      * Call this on form submit. Returns the badge payload.
      *
      * @returns {Object|null} badge payload, or null if insufficient data
-     *   { war, classification, flags, profile: { ... }, purity, session }
+     *   { war, raw_war, tier, classification, flags, components, paste,
+     *     purity, profile: { ... }, session }
      */
     score: function () {
       if (data.flightTimes.length < 10) return null
@@ -662,7 +379,7 @@ function attach(el) {
         sample_size: data.flightTimes.length,
       }
 
-      var result = scoreProfile(profile, data)
+      var result = JitterWAR.scoreProfile(profile, data)
 
       var duration = Math.round((Date.now() - data.sessionStartTime) / 1000)
       var minutes = duration / 60
@@ -672,9 +389,12 @@ function attach(el) {
 
       return {
         war: result.war,
+        raw_war: result.raw_war,
+        tier: result.tier,
         classification: result.classification,
         flags: result.flags,
         components: result.components,
+        paste: result.paste,
         purity: purity,
         profile: profile,
         session: {
@@ -683,6 +403,7 @@ function attach(el) {
           wpm: wpm,
           human_chars: data.humanChars,
           alien_chars: data.alienChars,
+          paste_count: data.pasteCount,
         },
       }
     },
@@ -692,6 +413,9 @@ function attach(el) {
      */
     reset: function () {
       data = createData()
+      lastInputLength = el.value ? el.value.length : 0
+      lastInputTime = 0
+      lastDeleteKeyTime = 0
     },
 
     /**
@@ -709,35 +433,54 @@ function attach(el) {
 }
 
 // ── scoreRaw: build profile from raw capture arrays and score ────────
+// Used by jitter-capture.js (the WGH path). Accepts { flightTimes, dwellTimes,
+// humanChars, alienChars, backspaceCount, pauseCount, pasteCount,
+// pasteLengths? } and returns the engine result.
+
+function insufficientData(captureData) {
+  return {
+    war: null, raw_war: null, tier: null, classification: 'insufficient_data',
+    components: {}, flags: ['too_short'], timeCap: 1.0,
+    paste: JitterWAR.summarizePaste(captureData && typeof captureData === 'object' ? captureData : {}),
+  }
+}
 
 function scoreRaw(captureData) {
-  if (!captureData || !captureData.flightTimes || captureData.flightTimes.length < 10) {
-    return { war: null, classification: 'insufficient_data', components: {}, flags: ['too_short'] }
-  }
+  if (!captureData || typeof captureData !== 'object') return insufficientData(captureData)
 
-  var ft = captureData.flightTimes
-  var dt = captureData.dwellTimes || []
-  var totalChars = (captureData.humanChars || 0) + (captureData.alienChars || 0)
-  var backspaces = captureData.backspaceCount || 0
-  var pauses = captureData.pauseCount || 0
+  var ft = JitterWAR.finiteNumbers(captureData.flightTimes)
+  if (ft.length < 10) return insufficientData(captureData)
+
+  var dt = JitterWAR.finiteNumbers(captureData.dwellTimes)
+  var humanChars = Math.max(0, JitterWAR.finiteOrNull(captureData.humanChars) || 0)
+  var backspaces = Math.max(0, JitterWAR.finiteOrNull(captureData.backspaceCount) || 0)
+  var pauses = Math.max(0, JitterWAR.finiteOrNull(captureData.pauseCount) || 0)
 
   var profile = {
     mean_inter_key: mean(ft),
     std_inter_key: std(ft),
     mean_dwell: dt.length > 0 ? mean(dt) : null,
     std_dwell: dt.length > 0 ? std(dt) : null,
-    edit_ratio: totalChars > 0 ? backspaces / totalChars : 0,
+    // Typed characters only: pasted text must not dilute the edit ratio,
+    // paste is transparent (Hard Rule #5).
+    edit_ratio: humanChars > 0 ? backspaces / humanChars : 0,
     pause_freq: ft.length > 0 ? pauses / (ft.length / 10) : 0,
     per_key_dwell: {},
     bigram_signatures: {},
   }
 
-  return scoreProfile(profile, captureData)
+  return JitterWAR.scoreProfile(profile, captureData)
 }
 
 // ── Export ──────────────────────────────────────────────────────────────
 
-var JitterBox = { attach: attach, scoreRaw: scoreRaw }
+var JitterBox = {
+  attach: attach,
+  scoreRaw: scoreRaw,
+  scoreProfile: JitterWAR.scoreProfile,
+  applyTimeCap: JitterWAR.applyTimeCap,
+  WAR: JitterWAR,
+}
 
 if (typeof window !== 'undefined') {
   window.JitterBox = JitterBox
@@ -745,9 +488,9 @@ if (typeof window !== 'undefined') {
 
 // Test-only exports (tree-shaken in prod)
 var _testExports = {
-  ksStatistic: ksStatistic, pearsonR: pearsonR, normalCDF: normalCDF,
-  scoreProfile: scoreProfile, scoreCrossSignal: scoreCrossSignal,
-  rampScore: rampScore, scoreRaw: scoreRaw,
+  ksStatistic: JitterWAR.ksStatistic, pearsonR: JitterWAR.pearsonR, normalCDF: JitterWAR.normalCDF,
+  scoreProfile: JitterWAR.scoreProfile, scoreCrossSignal: JitterWAR.scoreCrossSignal,
+  rampScore: JitterWAR.rampScore, scoreRaw: scoreRaw, JitterWAR: JitterWAR,
 }
 
 export default JitterBox

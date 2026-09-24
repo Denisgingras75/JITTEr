@@ -26,14 +26,17 @@ import android.util.TypedValue
  * - Biometric tracking on every keypress
  * - Real-time purity display
  * - Touch pressure capture
+ * - Tap motion evidence (accelerometer/gyroscope jolt per tap, aggregates only)
  */
 class AnvilInputMethodService : InputMethodService() {
     
     private lateinit var tracker: BiometricTracker
+    private lateinit var motion: TapMotionSensor
     private lateinit var keyboardView: LinearLayout
     private lateinit var statusBar: LinearLayout
     private lateinit var purityText: TextView
     private lateinit var keystrokeText: TextView
+    private lateinit var motionText: TextView
     
     private var isShiftOn = false
     private var isCapsLock = false
@@ -45,12 +48,30 @@ class AnvilInputMethodService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         tracker = BiometricTracker(this)
+        motion = TapMotionSensor(this)
     }
     
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        recordMotion(motion.finishSession())
         tracker.startSession()
+        motion.start()
         updateStatusBar()
+    }
+    
+    override fun onFinishInputView(finishingInput: Boolean) {
+        // Sensors only run while the keyboard is on screen.
+        recordMotion(motion.stop())
+        super.onFinishInputView(finishingInput)
+    }
+    
+    override fun onDestroy() {
+        recordMotion(motion.stop())
+        super.onDestroy()
+    }
+    
+    private fun recordMotion(result: MotionSessionResult) {
+        if (result.summary.tapsSeen > 0) tracker.recordMotionSession(result)
     }
     
     override fun onCreateInputView(): View {
@@ -132,6 +153,14 @@ class AnvilInputMethodService : InputMethodService() {
                 setTypeface(null, android.graphics.Typeface.BOLD)
             }
             addView(purityText)
+            
+            // Share of taps this session that physically jolted the phone
+            motionText = TextView(context).apply {
+                text = "  📳 —"
+                setTextColor(Color.parseColor("#666666"))
+                textSize = 12f
+            }
+            addView(motionText)
         }
     }
     
@@ -245,6 +274,7 @@ class AnvilInputMethodService : InputMethodService() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
+                        motion.onTouchDown(event)
                         true
                     }
                     MotionEvent.ACTION_UP -> {
@@ -291,6 +321,7 @@ class AnvilInputMethodService : InputMethodService() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
+                        motion.onTouchDown(event)
                         true
                     }
                     MotionEvent.ACTION_UP -> {
@@ -327,6 +358,7 @@ class AnvilInputMethodService : InputMethodService() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
+                        motion.onTouchDown(event)
                         true
                     }
                     MotionEvent.ACTION_UP -> {
@@ -373,9 +405,23 @@ class AnvilInputMethodService : InputMethodService() {
             if (purity >= 80) Color.parseColor("#00BA7C")
             else Color.parseColor("#FF4444")
         )
+        
+        val motionPct = motion.analyzer.liveImpulsePercent()
+        motionText.text = if (motionPct == null) "  📳 —" else "  📳 $motionPct%"
+        motionText.setTextColor(
+            when {
+                motionPct == null -> Color.parseColor("#666666")
+                motionPct >= 60 -> Color.parseColor("#00BA7C")
+                motionPct >= 20 -> Color.parseColor("#FFB020")
+                else -> Color.parseColor("#666666")
+            }
+        )
     }
     
     private fun vibrate() {
+        // Our own vibration shakes the phone too; tell the motion analyzer to ignore it.
+        motion.onHaptic()
+        
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vm.defaultVibrator

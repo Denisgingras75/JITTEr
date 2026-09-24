@@ -26,8 +26,8 @@ test.describe('Bot Detection (Loki Biometrics)', () => {
     await botType(page, text);
     await page.waitForTimeout(200);
 
-    // Check bio.isBot is true
-    const isBot = await page.evaluate(() => bio.isBot);
+    // The Loki check should flag the session as a bot
+    const isBot = await page.evaluate(() => JitterBio.analyzeLoki(bioSession).isBot);
     expect(isBot).toBe(true);
 
     // Try to mint — should show alert blocking it
@@ -71,7 +71,7 @@ test.describe('Bot Detection (Loki Biometrics)', () => {
     }
     await page.waitForTimeout(200);
 
-    const isBot = await page.evaluate(() => bio.isBot);
+    const isBot = await page.evaluate(() => JitterBio.analyzeLoki(bioSession).isBot);
     expect(isBot).toBe(false);
 
     const stats = await getStats(page);

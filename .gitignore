@@ -1,6 +1,6 @@
 # Build artifacts
 *.zip
-sdk/dist/
+sdk/examples/jitter.min.js
 node_modules/
 
 # OS files
@@ -27,3 +27,7 @@ android/app/build/
 # Secrets
 .env
 .env.local
+
+# Test output
+test-results/
+playwright-report/

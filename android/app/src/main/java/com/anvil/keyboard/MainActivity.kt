@@ -21,6 +21,7 @@ import android.graphics.drawable.GradientDrawable
  * Shows:
  * - Setup instructions
  * - Lifetime stats (passport)
+ * - Tap motion evidence
  * - Badge generation
  */
 class MainActivity : AppCompatActivity() {
@@ -38,7 +39,8 @@ class MainActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        // Refresh UI when returning to app
+        // Refresh UI when returning to app (reload so stats typed since onCreate show up)
+        tracker = BiometricTracker(this)
         setContentView(createMainLayout())
     }
     
@@ -60,6 +62,9 @@ class MainActivity : AppCompatActivity() {
                 
                 // Stats Card
                 addView(createStatsCard())
+                
+                // Motion Card
+                addView(createMotionCard())
                 
                 // Badge Card
                 addView(createBadgeCard())
@@ -142,6 +147,50 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun createMotionCard(): LinearLayout {
+        val profile = tracker.getMotionProfile()
+        return createCard("📳 MOTION EVIDENCE", Color.parseColor("#00BA7C")).apply {
+            
+            addView(TextView(context).apply {
+                text = "A real tap gives the phone a tiny jolt. Anvil measures it on-device while the keyboard is open; raw sensor data never leaves your phone."
+                setTextColor(Color.parseColor("#aaaaaa"))
+                textSize = 13f
+                setPadding(0, 0, 0, dp(12))
+            })
+            
+            val evidence = profile.evidence
+            addView(createStatRow("Evidence", evidenceLabel(evidence), evidenceColor(evidence)))
+            
+            if (profile.tapsAnalyzed > 0) {
+                addView(createStatRow("Taps measured", formatNumber(profile.tapsAnalyzed)))
+                addView(createStatRow("Taps with a jolt", "${Math.round(profile.impulseRate * 100)}%"))
+                if (profile.accelPeak.n > 1) {
+                    addView(createStatRow(
+                        "Typical jolt",
+                        String.format("%.2f m/s² ±%d%%", profile.accelPeak.mean, Math.round(profile.accelPeak.cv * 100))
+                    ))
+                }
+            }
+            
+            profile.lastSession?.let { last ->
+                addView(createStatRow("Last session", "${last.tapsAnalyzed} taps · ${evidenceLabel(last.evidence)}"))
+            }
+        }
+    }
+    
+    private fun evidenceLabel(evidence: String): String = when (evidence) {
+        TapMotionAnalyzer.EVIDENCE_STRONG -> "Strong"
+        TapMotionAnalyzer.EVIDENCE_WEAK -> "Weak"
+        TapMotionAnalyzer.EVIDENCE_NONE -> "None detected"
+        else -> "Not enough data"
+    }
+    
+    private fun evidenceColor(evidence: String): Int = when (evidence) {
+        TapMotionAnalyzer.EVIDENCE_STRONG -> Color.parseColor("#00BA7C")
+        TapMotionAnalyzer.EVIDENCE_WEAK -> Color.parseColor("#FFB020")
+        else -> Color.parseColor("#888888")
+    }
+    
     private fun createBadgeCard(): LinearLayout {
         return createCard("🏷️ COPY BADGE", Color.parseColor("#00BA7C")).apply {
             
@@ -164,6 +213,7 @@ class MainActivity : AppCompatActivity() {
             val steps = listOf(
                 "1. Type using Anvil Keyboard",
                 "2. Every keystroke is tracked with timing & pressure",
+                "   ...and each tap's jolt on the motion sensors (summaries only)",
                 "3. Pasting is logged separately",
                 "4. Your purity score = typed / (typed + pasted)",
                 "5. Badges prove your work is human-made"

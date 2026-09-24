@@ -137,35 +137,41 @@ function init(opts) {
   if (opts.onScore) config.onScore = opts.onScore
 
   if (config.autoAttach) {
-    // Attach to existing textareas
-    var elements = document.querySelectorAll(config.selector)
-    for (var i = 0; i < elements.length; i++) {
-      attach(elements[i])
-    }
+    // Called from <head>, before <body> exists: wait for the DOM.
+    if (document.body) autoAttach()
+    else document.addEventListener('DOMContentLoaded', autoAttach)
+  }
+}
 
-    // Watch for dynamically added textareas
-    if (typeof MutationObserver !== 'undefined') {
-      var observer = new MutationObserver(function (mutations) {
-        for (var j = 0; j < mutations.length; j++) {
-          var added = mutations[j].addedNodes
-          for (var k = 0; k < added.length; k++) {
-            var node = added[k]
-            if (node.nodeType !== 1) continue
-            if (node.matches && node.matches(config.selector)) {
-              attach(node)
-            }
-            // Check children too
-            if (node.querySelectorAll) {
-              var children = node.querySelectorAll(config.selector)
-              for (var l = 0; l < children.length; l++) {
-                attach(children[l])
-              }
+function autoAttach() {
+  // Attach to existing textareas
+  var elements = document.querySelectorAll(config.selector)
+  for (var i = 0; i < elements.length; i++) {
+    attach(elements[i])
+  }
+
+  // Watch for dynamically added textareas
+  if (typeof MutationObserver !== 'undefined') {
+    var observer = new MutationObserver(function (mutations) {
+      for (var j = 0; j < mutations.length; j++) {
+        var added = mutations[j].addedNodes
+        for (var k = 0; k < added.length; k++) {
+          var node = added[k]
+          if (node.nodeType !== 1) continue
+          if (node.matches && node.matches(config.selector)) {
+            attach(node)
+          }
+          // Check children too
+          if (node.querySelectorAll) {
+            var children = node.querySelectorAll(config.selector)
+            for (var l = 0; l < children.length; l++) {
+              attach(children[l])
             }
           }
         }
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-    }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
   }
 }
 
@@ -180,8 +186,9 @@ function attach(el) {
   var instance = JitterBox.attach(el)
   instances.set(el, instance)
 
-  // Mark element as jitter-enabled
-  el.setAttribute('data-jitter', 'active')
+  // Mark element as jitter-enabled. (data-jitter="true" belongs to the
+  // integrator and jitter-capture.js; leave it alone.)
+  el.setAttribute('data-jitter-sdk', 'active')
 
   return instance
 }
@@ -228,7 +235,7 @@ function detach(el) {
   if (instance) {
     instance.detach()
     instances.delete(el)
-    el.removeAttribute('data-jitter')
+    el.removeAttribute('data-jitter-sdk')
   }
 }
 
@@ -238,7 +245,7 @@ function detach(el) {
 function detachAll() {
   instances.forEach(function (instance, el) {
     instance.detach()
-    el.removeAttribute('data-jitter')
+    el.removeAttribute('data-jitter-sdk')
   })
   instances.clear()
 }

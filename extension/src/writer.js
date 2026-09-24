@@ -13,6 +13,9 @@
  */
 
 // --- WRITING LEDGER ---
+const ATTEST_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/attest";
+const VERIFY_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/verify";
+
 const ledger = {
     ops: [],           // append-only operation timeline
     checkpoints: [],   // content snapshots every 10 ops, hash-chained
@@ -294,7 +297,7 @@ async function exportBadge() {
 
     const editor = document.getElementById('editor');
     const textLength = editor.innerText.length;
-    const date = new Date().toLocaleDateString();
+    const date = new Date().toISOString().slice(0, 10);
 
     const sessionTotal = session.humanChars + session.alienChars;
     const purity = sessionTotal > 0 ? Math.round((session.humanChars / sessionTotal) * 100) : 100;
@@ -323,6 +326,8 @@ async function exportBadge() {
 
     let publicKeyJwk = null;
     if (typeof CryptoUtils !== 'undefined') {
+        // Ensure key pair exists before reading fingerprint/JWK
+        await CryptoUtils.getOrCreateKeyPair();
         publicKeyFingerprint = await CryptoUtils.getPublicKeyFingerprint();
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
         publicKeyJwk = await CryptoUtils.getPublicKeyJwk();
@@ -330,6 +335,7 @@ async function exportBadge() {
 
     // WAR score
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const warUncapped = warResult ? warResult.war : null; // applyTimeCap caps in place
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
 
     const payload = {
@@ -339,6 +345,7 @@ async function exportBadge() {
         timestamp: Date.now(),
         // WAR (v3.0)
         war: cappedWar ? cappedWar.war : null,
+        war_uncapped: warUncapped, // typing score after penalties, before the client-side age cap
         raw_war: cappedWar ? cappedWar.raw_war : null,
         war_tier: cappedWar ? cappedWar.tier : null,
         time_cap: cappedWar ? cappedWar.timeCap : null,
@@ -384,13 +391,25 @@ async function exportBadge() {
         // Crypto chain
         previousBadge: previousBadgeHash,
         publicKeyId: publicKeyFingerprint,
-        publicKeyJwk: publicKeyJwk
+        publicKeyJwk: publicKeyJwk,
+        // Content binding
+        text_hash: typeof CryptoUtils !== 'undefined' ? await CryptoUtils.textHash(editor.innerText) : null,
+        url: 'jitter://writer',
+        minted_at: new Date().toISOString()
     };
 
-    // Sign the payload
+    // Sign with the device key, then attest (server-side age cap and countersignature)
+    let verifyHref = null;
     if (typeof CryptoUtils !== 'undefined') {
         signature = await CryptoUtils.signBadge(payload);
         if (signature) {
+            const res = await CryptoUtils.attest(ATTEST_URL, 'writer', payload, signature);
+            if (res) {
+                payload.attestation = res.attestation;
+                payload.server_signature = res.server_signature || null;
+                payload.server_key_id = res.server_key_id || null;
+                verifyHref = `${VERIFY_URL}?hash=${res.badge_hash}`;
+            }
             payload.signature = signature;
         }
     }
@@ -398,14 +417,15 @@ async function exportBadge() {
     chrome.storage.local.set({ passport: passport });
 
     const base64 = btoa(JSON.stringify(payload));
-    const blockID = base64.slice(-6).toUpperCase();
+    const badgeHash = typeof CryptoUtils !== 'undefined' ? await CryptoUtils.hashBadge(base64) : null;
+    const blockID = (badgeHash || base64).slice(0, 6).toUpperCase();
 
     // Store badge hash for next badge's chain
     if (typeof CryptoUtils !== 'undefined') {
         await CryptoUtils.storeBadgeHash(base64);
     }
     
-    const url = `#jitter:${base64}`;
+    const url = verifyHref || `#jitter:${base64}`;
     const htmlBadge = `<a href="${url}" style="text-decoration:none;" data-jitter-payload="${base64}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${blockID}</span></a>`;
     const plainBadge = `\n\n[ JITTER-BLOCK: 0x${blockID} | INT:${integrity}% | RATIO:${payload.cr} ]`;
 
@@ -480,7 +500,8 @@ async function exportLedger() {
 function openReplay() {
     const panel = document.getElementById('replay-panel');
     if (!panel) return;
-    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    const isHidden = !panel.style.display || panel.style.display === 'none';
+    panel.style.display = isHidden ? 'flex' : 'none';
     if (panel.style.display === 'flex') {
         renderReplay(0);
         // Update scrubber max

@@ -35,7 +35,81 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     getUser().then(sendResponse);
     return true;
   }
+  if (request.action === 'deviceKey') {
+    deviceInfo().then(sendResponse, () => sendResponse(null));
+    return true;
+  }
+  if (request.action === 'sign') {
+    signWithDevice(request.data).then(sig => sendResponse({ signature: sig }), () => sendResponse(null));
+    return true;
+  }
 });
+
+// --- Device key: the extension's identity ---
+// A P-256 key pair generated once, non-extractable, kept in this service
+// worker's IndexedDB. Content scripts and extension pages ask it to sign;
+// the private key never reaches a web page. The device id (SHA-256 of the
+// public key) is what the attestation server tracks age and rate limits by.
+
+const DEVICE_DB = 'jitter-device';
+let deviceKeyPromise = null;
+
+function openDeviceDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DEVICE_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('keys');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbGet(db, key) {
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('keys').objectStore('keys').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbPut(db, key, value) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('keys', 'readwrite');
+    tx.objectStore('keys').put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function getDeviceKeyPair() {
+  if (!deviceKeyPromise) {
+    deviceKeyPromise = (async () => {
+      const db = await openDeviceDb();
+      let pair = await idbGet(db, 'device');
+      if (!pair) {
+        pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+        await idbPut(db, 'device', pair);
+      }
+      return pair;
+    })().catch(e => { deviceKeyPromise = null; throw e; });
+  }
+  return deviceKeyPromise;
+}
+
+async function deviceInfo() {
+  const pair = await getDeviceKeyPair();
+  const jwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const raw = await crypto.subtle.exportKey('raw', pair.publicKey);
+  const digest = await crypto.subtle.digest('SHA-256', raw);
+  const deviceId = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return { jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }, deviceId, keyId: deviceId.slice(0, 12).toUpperCase() };
+}
+
+async function signWithDevice(data) {
+  if (typeof data !== 'string' || data.length > 65536) throw new Error('bad data');
+  const pair = await getDeviceKeyPair();
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: { name: 'SHA-256' } }, pair.privateKey, new TextEncoder().encode(data));
+  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
 
 function openWriter() {
   const writerUrl = chrome.runtime.getURL('writer.html');
