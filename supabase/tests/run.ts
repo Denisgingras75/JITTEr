@@ -97,6 +97,15 @@ const badgeHash = r1.json?.badge_hash;
     `T1b client-capped badge with war_uncapped 0.72 is "building" (got ${JSON.stringify(r.json?.attestation)})`);
 }
 
+// ── T1c a jitter-capture (SDK) badge: no client cap, site's own user ref ─
+{
+  const dev3 = await makeDevice();
+  const r = await attest({ site_key: 'wgh', ...(await signedBadge(dev3, { type: 'capture', site_user: 'wgh-user-42', war: 0.66, war_uncapped: 0.66, meta: { pasteCount: 0 } })) });
+  const row = (await g.__pg.query(`select meta from attestations where badge_hash = $1`, [r.json?.badge_hash])).rows[0];
+  assert(r.status === 200 && row?.meta?.site_user === 'wgh-user-42' && r.json?.attestation?.classification === 'building',
+    `T1c capture badge attested, site_user kept as an opaque reference (got ${r.status} ${JSON.stringify(row?.meta)})`);
+}
+
 // ── T2 tampering / forgery ──────────────────────────────────────────────
 {
   const t = await attest({ site_key: 'wgh', badge: { ...first.badge, war: 0.99 }, signature: first.signature });

@@ -12,8 +12,15 @@
  *   JitterCapture.init({ siteKey: 'wgh', attestUrl: 'https://xxx.supabase.co/functions/v1/attest' });
  *
  * On submit:
- *   var result = await JitterCapture.scoreAndAttest('review-text', userId);
- *   // result = { war, classification, flags, badge, meta, badge_hash, verifyUrl }
+ *   var result = await JitterCapture.scoreAndAttest('review-text', siteUserId);
+ *   // result = { war, classification, flags, badge, meta,
+ *   //            badge_hash, verifyUrl, attestation, server_signature, attestError }
+ *
+ * Identity: on first use this origin gets a P-256 device key, generated
+ * non-extractable and kept in IndexedDB. Badges are signed with it and bound
+ * to the text (SHA-256) and page. The attestation server tracks device age
+ * and rate limits by that key; the site's own user id travels along as an
+ * opaque reference. No login, nothing to configure.
  */
 
 ;(function(global) {
@@ -41,10 +48,11 @@
     return {
       flightTimes: [],
       dwellTimes: [],
+      keyDownTimes: {},
       lastKeydown: 0,
-      lastKeydownTime: 0,
       humanChars: 0,
       alienChars: 0,
+      pasteLengths: [],
       backspaceCount: 0,
       pauseCount: 0,
 
@@ -67,6 +75,8 @@
     setSession(el, session)
 
     el.addEventListener('keydown', function(e) {
+      // Page scripts can dispatch KeyboardEvents; only real input counts.
+      if (!e.isTrusted || e.repeat || typeof e.key !== 'string') return
       var now = performance.now()
       var s = getSession(el)
 
@@ -89,27 +99,39 @@
           }
         }
         s.humanChars++
-        s.lastKeydownTime = now
+        s.keyDownTimes[e.key.toLowerCase()] = now
         s.lastKeydown = now
       }
     })
 
     el.addEventListener('keyup', function(e) {
+      if (!e.isTrusted || typeof e.key !== 'string') return
       var now = performance.now()
       var s = getSession(el)
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && s.lastKeydownTime > 0) {
-        var dwell = now - s.lastKeydownTime
-        if (dwell > 0 && dwell < 500) {
-          s.dwellTimes.push(dwell)
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        // Dwell is this key's own keydown -> keyup; with rollover the last
+        // keydown may belong to the next key.
+        var keyLower = e.key.toLowerCase()
+        var down = s.keyDownTimes[keyLower]
+        if (down > 0) {
+          var dwell = now - down
+          if (dwell > 0 && dwell < 500) {
+            s.dwellTimes.push(dwell)
+          }
+          delete s.keyDownTimes[keyLower]
         }
       }
     })
 
     el.addEventListener('paste', function(e) {
+      if (!e.isTrusted) return
       var s = getSession(el)
       s.pasteCount++
       var text = e.clipboardData ? e.clipboardData.getData('text/plain') : ''
-      if (text.length > 0) s.alienChars += text.length
+      if (text.length > 0) {
+        s.alienChars += text.length
+        s.pasteLengths.push(text.length)
+      }
     })
 
     el.addEventListener('copy', function() {
@@ -135,8 +157,12 @@
     })
   }
 
+  function resolveElement(elOrId) {
+    return typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId
+  }
+
   function scoreElement(elOrId) {
-    var el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId
+    var el = resolveElement(elOrId)
     if (!el) return { war: null, classification: 'untracked', flags: [], badge: null, meta: null }
 
     var s = getSession(el)
@@ -157,6 +183,7 @@
       dwellTimes: s.dwellTimes,
       humanChars: s.humanChars,
       alienChars: s.alienChars,
+      pasteLengths: s.pasteLengths,
       backspaceCount: s.backspaceCount,
       pauseCount: s.pauseCount,
     }
@@ -184,6 +211,10 @@
       flags: result.flags,
       badge: buildBadge(result),
       meta: buildMeta(s),
+      session: {
+        keys: s.humanChars, pastes: s.pasteCount, pastedChars: s.alienChars,
+        meanDwell: s.dwellTimes.length ? Math.round(s.dwellTimes.reduce(function(a, b) { return a + b }, 0) / s.dwellTimes.length) : null,
+      },
     }
   }
 
@@ -230,7 +261,7 @@
   }
 
   function resetElement(elOrId) {
-    var el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId
+    var el = resolveElement(elOrId)
     if (el) setSession(el, createWidgetSession())
   }
 
@@ -265,46 +296,168 @@
     }
   }
 
+  // --- Device key ---
+  // One P-256 key pair per origin, generated non-extractable and kept in
+  // IndexedDB. Its public key is the device's identity on the server.
+
+  var DB_NAME = 'jitter-device'
+  var deviceKeyPromise = null
+
+  function openDb() {
+    return new Promise(function(resolve, reject) {
+      var req = indexedDB.open(DB_NAME, 1)
+      req.onupgradeneeded = function() { req.result.createObjectStore('keys') }
+      req.onsuccess = function() { resolve(req.result) }
+      req.onerror = function() { reject(req.error) }
+    })
+  }
+
+  function idbGet(db, key) {
+    return new Promise(function(resolve, reject) {
+      var req = db.transaction('keys').objectStore('keys').get(key)
+      req.onsuccess = function() { resolve(req.result) }
+      req.onerror = function() { reject(req.error) }
+    })
+  }
+
+  function idbPut(db, key, value) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('keys', 'readwrite')
+      tx.objectStore('keys').put(value, key)
+      tx.oncomplete = function() { resolve() }
+      tx.onerror = function() { reject(tx.error) }
+    })
+  }
+
+  function getDeviceKey() {
+    if (!deviceKeyPromise) {
+      deviceKeyPromise = (async function() {
+        var db = await openDb()
+        var pair = await idbGet(db, 'device')
+        if (!pair) {
+          pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify'])
+          await idbPut(db, 'device', pair)
+        }
+        var jwk = await crypto.subtle.exportKey('jwk', pair.publicKey)
+        return { pair: pair, jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y } }
+      })().catch(function(e) { deviceKeyPromise = null; throw e })
+    }
+    return deviceKeyPromise
+  }
+
+  // Canonical JSON: keys sorted at every depth, undefined dropped. Must match
+  // what the attestation server (supabase/functions/_shared/trust.ts) computes.
+  function canonicalJson(value) {
+    if (value === undefined) return 'null'
+    if (value === null || typeof value !== 'object') return JSON.stringify(value)
+    if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']'
+    return '{' + Object.keys(value).sort()
+      .filter(function(k) { return value[k] !== undefined })
+      .map(function(k) { return JSON.stringify(k) + ':' + canonicalJson(value[k]) })
+      .join(',') + '}'
+  }
+
+  function toBase64(buf) {
+    var bytes = new Uint8Array(buf), s = ''
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i])
+    return btoa(s)
+  }
+
+  async function sha256Hex(text) {
+    var digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return Array.from(new Uint8Array(digest)).map(function(b) { return b.toString(16).padStart(2, '0') }).join('')
+  }
+
+  // Same normalisation as the extension's verify page, so pasted text matches.
+  function textHash(text) {
+    return sha256Hex(String(text).replace(/\r\n?/g, '\n').trim())
+  }
+
+  async function signBadge(badge) {
+    var device = await getDeviceKey()
+    var sig = await crypto.subtle.sign({ name: 'ECDSA', hash: { name: 'SHA-256' } }, device.pair.privateKey,
+      new TextEncoder().encode(canonicalJson(badge)))
+    return toBase64(sig)
+  }
+
   // --- Config + Attestation ---
 
-  var config = { siteKey: 'wgh', attestUrl: null }
+  var config = { siteKey: 'wgh', attestUrl: null, timeoutMs: 8000 }
 
   function init(opts) {
     if (opts.siteKey) config.siteKey = opts.siteKey
     if (opts.attestUrl) config.attestUrl = opts.attestUrl
+    if (opts.timeoutMs) config.timeoutMs = opts.timeoutMs
   }
 
-  function scoreAndAttest(elOrId, userId) {
-    var result = scoreElement(elOrId)
+  /**
+   * Scores the element and, when attestUrl is configured, signs the result
+   * with the device key and sends it to the attestation server. The server's
+   * record (device age, cap, verdict, countersignature) comes back on the
+   * result. Attestation failures are reported on result.attestError and
+   * never throw: the site always gets the local score.
+   * @param {string|HTMLElement} elOrId
+   * @param {string} [siteUser] the site's own id for this user, passed along as an opaque reference
+   */
+  async function scoreAndAttest(elOrId, siteUser) {
+    var el = resolveElement(elOrId)
+    var result = scoreElement(el)
+    if (!config.attestUrl || result.war == null) return result
 
-    if (!config.attestUrl || !userId || result.war == null) {
-      return Promise.resolve(result)
-    }
-
-    return fetch(config.attestUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: userId,
+    try {
+      var device = await getDeviceKey()
+      var badge = {
+        version: '3.0',
+        type: 'capture',
         site_key: config.siteKey,
-        war_score: result.war,
-        classification: result.classification,
-        flags: result.flags,
+        site_user: siteUser ? String(siteUser).slice(0, 128) : null,
+        war: result.war,
+        war_uncapped: result.war,
+        raw_war: result.raw_war == null ? null : result.raw_war,
+        war_flags: result.flags || [],
+        keys: result.session.keys,
+        pastes: result.session.pastes,
+        pastedChars: result.session.pastedChars,
+        text_hash: await textHash(el.value || ''),
+        url: location.origin + location.pathname,
+        minted_at: new Date().toISOString(),
+        publicKeyJwk: device.jwk,
         meta: result.meta,
-      })
-    })
-    .then(function(res) { return res.json() })
-    .then(function(data) {
-      result.badge_hash = data.badge_hash || null
-      if (data.badge_hash && config.attestUrl) {
-        result.verifyUrl = config.attestUrl.replace('/attest', '/verify') + '?hash=' + data.badge_hash
       }
+      var signature = await signBadge(badge)
+      result.signed = { badge: badge, signature: signature }
+
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+      var timer = controller ? setTimeout(function() { controller.abort() }, config.timeoutMs) : null
+      var res
+      try {
+        res = await fetch(config.attestUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ site_key: config.siteKey, badge: badge, signature: signature }),
+          signal: controller ? controller.signal : undefined,
+        })
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+      var data = null
+      try { data = await res.json() } catch (e) { data = null }
+      if (!res.ok || !data || !data.badge_hash) {
+        result.attestError = { status: res.status, error: data && data.error ? data.error : 'attest_failed' }
+        return result
+      }
+      result.badge_hash = data.badge_hash
+      result.attestation = data.attestation || null
+      result.server_signature = data.server_signature || null
+      result.server_key_id = data.server_key_id || null
+      if (data.attestation && data.attestation.classification) result.classification = data.attestation.classification
+      result.verifyUrl = config.attestUrl.replace(/\/attest$/, '/verify') + '?hash=' + data.badge_hash
       return result
-    })
-    .catch(function() {
-      // Never block — attestation is additive
+    } catch (e) {
+      // Never block: attestation is additive
+      result.attestError = { status: 0, error: e && e.name === 'AbortError' ? 'timeout' : 'network' }
       return result
-    })
+    }
   }
 
   global.JitterCapture = {
@@ -313,6 +466,8 @@
     score: scoreElement,
     scoreAndAttest: scoreAndAttest,
     reset: resetElement,
+    canonicalJson: canonicalJson,
+    textHash: textHash,
   }
 
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this)

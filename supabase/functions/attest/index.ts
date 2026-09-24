@@ -120,7 +120,11 @@ serve(async (req) => {
     classification,
     badge_hash: badgeHash,
     flags,
-    meta: { keys, pastes: badge.pastes ?? null, integrity: badge.integrity ?? null },
+    meta: {
+      keys, pastes: badge.pastes ?? null, integrity: badge.integrity ?? null,
+      // the site's own reference for this user, opaque to us
+      site_user: typeof badge.site_user === 'string' ? badge.site_user.slice(0, 128) : null,
+    },
     device_id: deviceId,
     text_hash: badge.text_hash ?? null,
     url: badge.url ?? null,
