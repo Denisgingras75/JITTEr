@@ -15,7 +15,7 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 |---|---|---|
 | Student writes in the extension's Writer, teacher verifies | ❌ | `writer.html`, `verify.html`, `verifier.html` load their scripts from the wrong folder and use inline or remote scripts that Manifest V3 blocks (P0-1). |
 | Badge from any web page, verified by a recipient | ❌ | The server path returns 401 on every call and the Supabase project is paused (P0-6). The in-extension check accepts forged badges (P0-2). |
-| Website embeds the SDK widget | ❌ | `Jitter.init()` / `JitterBox.attach()` recurse until the stack overflows (P0-7). |
+| Website embeds the SDK widget | ❌ | `Jitter.init()` / `JitterBox.attach()` recurse until the stack overflows (P0-7). None of the 8 widget done-criteria in JITTER-PLAN are met. |
 | Android keyboard | ❌ | The project can't be built by any documented route (P0-9). |
 | `npm test` | ❌ | 0 of 39 pass. The unit tests that do pass aren't run by it (P1-20). |
 
@@ -23,7 +23,8 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 - **Scoring:** the scorer doesn't separate humans from bots within one session. In a 200-session simulation, synthetic humans were almost never "verified", while a bot written against the shipped scoring code was "verified" every time (P0-8).
 - **Forgery:**
   - Badges verify against a key carried inside the badge itself (P0-2).
-  - Page JavaScript can mint a badge with no human typing (P0-3).
+  - Page JavaScript can pass as a human: the extension mints it a signed badge, and the SDK rates a 40-line script "verified" (P0-3).
+  - The SDK signs nothing. Its token is plain base64, and its trust gates live in `localStorage` (P0-10).
   - The database accepts attestations written directly with the public anon key (P0-5).
 - **Time moat:** "time is the moat" isn't implemented anywhere a server enforces it. The only time cap reads a client-side date that the client can change.
 
@@ -61,7 +62,7 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 | Extension: content script, HUD, mint | Partly | Capture and mint work. Badges are forgeable, page JS can mint them, and links are an XSS vector. | P0-2, P0-3, P0-4, P1-1, P1-2, P1-7..P1-11 |
 | Extension: Writer / Verify / Verifier pages | No | Scripts don't load in the real extension | P0-1, P1-4, P1-5, P1-6, P1-12 |
 | Extension: popup / background / sign-in | Partly | Buttons open broken pages. The sign-in identity isn't stable. | P1-8, P3 |
-| SDK widget (current build target) | No | `attach` recursion. No signed badge, no hidden `jitter_badge` field, no day-0 cap. | P0-7, SDK section |
+| SDK widget (current build target) | No | `attach` recursion; 0 of 8 done-criteria; nothing signed; trust gates in `localStorage`; mobile and IME typing unscored on the WGH path | P0-3, P0-7, P0-10, SDK section |
 | Scoring engines (lab / SDK / extension) | Runs, doesn't discriminate | Three forks; paste is penalized; the time cap raises penalized scores | P0-8, P1-1, P1-3, P1-15..P1-19 |
 | Supabase backend | Unreachable; insecure | 401 via `verify_jwt`, trusts the client, RLS open to anon | P0-5, P0-6, P1-13, P1-14 |
 | Android keyboard | Doesn't build | Also has unsigned badges and fake purity | P0-9, P1-21..P1-23 |
@@ -89,11 +90,19 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 - **Private key exposure:** the user's private key is stored as an extractable JWK in `chrome.storage.local` (`crypto-utils.js:43-50`), and it can be read from the content-script context on any site.
 - **Fix:** anchor trust. Either register each device's public key with the server at sign-in and have verifiers fetch it by key ID, or have the server countersign. Sign from a non-extractable key held in the service worker.
 
-### P0-3 · Web pages can mint badges without a human · VERIFIED
-- There are no `isTrusted` checks anywhere in `extension/src` or `sdk/src`, so synthetic `KeyboardEvent`s from page script count as typing (`content.js:71-111`).
-- The MINT and START buttons are ordinary DOM nodes in the page with `onclick` handlers (`content.js:224-235`), so page script can click them.
-- **Repro:** 360 dispatched events with log-normal timing, then `.click()` on `#btn-start` and `#btn-copy`. The result was a signed "All-Star" badge (WAR 0.75, no flags) on the clipboard. 5,000 synthetic keydowns also inflated the passport by 5,000.
-- **Fix:** ignore `!e.isTrusted`. Put the UI in a closed shadow root or the popup, and require a trusted gesture to mint.
+### P0-3 · Page script can pass as a human (extension and SDK) · VERIFIED
+- There are no `isTrusted` checks anywhere in `extension/src` or `sdk/src`, so synthetic `KeyboardEvent`s from page script count as typing (`content.js:71-111`; `sdk/src/core/jitter-box.js:415-426`; `jitter-capture.js:69-95`).
+- **Extension:**
+  - The MINT and START buttons are ordinary DOM nodes in the page with `onclick` handlers (`content.js:224-235`), so page script can click them.
+  - **Repro:** 360 dispatched events with log-normal timing, then `.click()` on `#btn-start` and `#btn-copy`. The result was a signed "All-Star" badge (WAR 0.75, no flags) on the clipboard.
+  - 5,000 synthetic keydowns also inflated the passport by 5,000.
+- **SDK:**
+  - A plain-JS bot dispatching synthetic `KeyboardEvent`s (`isTrusted=false`) scored **0.91–0.95, "verified"** in 4 of 4 runs on the engine path. Simulated humans typing with trusted input scored 0.59–0.78, all "suspicious".
+  - Text inserted without key events (`execCommand('insertText')`, CDP `insertText`) is credited through the mobile fallback (`jitter-box.js:524-573`) with no dwell data, so the dwell floor never fires.
+- **Fix:**
+  - Ignore `!e.isTrusted`.
+  - Require key events for "typed" credit.
+  - In the extension, move the UI into a closed shadow root or the popup, and require a trusted gesture to mint.
 
 ### P0-4 · A crafted badge link runs script on any site the user visits · VERIFIED
 - `showMiniHUD` (`content.js:241`) and `showCertificate` (`content.js:245-289`) decode `#jitter:<base64>` from any link and insert `date`, `war`, `title` and other fields into `innerHTML` unescaped.
@@ -128,9 +137,17 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 
 ### P0-7 · The SDK widget crashes on attach · VERIFIED (reproduced by the lead in Chromium)
 - `sdk/dist/jitter.min.js` has two `function attach` declarations in one scope (`:409` core, `:1032` `init.js`). Hoisting makes `JitterBox.attach` the init wrapper, which calls `JitterBox.attach` again. In the browser `JitterBox.attach === Jitter.attach` is `true`.
-- Both `JitterBox.attach(el)` and `Jitter.init({...})` throw `RangeError: Maximum call stack size exceeded`. `examples/vanilla.html` throws on load.
+- Both `JitterBox.attach(el)` and `Jitter.init({...})` throw `RangeError: Maximum call stack size exceeded`, so nothing attaches.
+- Knock-on effects:
+  - The MutationObserver callback throws for textareas added later.
+  - `Jitter.score()` always returns null.
+  - `examples/vanilla.html` throws at `:121`, so its Score and Reset handlers are never wired.
+- The bug has been in every dist build since the first one (`f640e1d`), including `archive/jitter-sdk/dist`.
 - No test calls `attach`.
-- **Fix:** rename the `init.js` function or give each module its own scope in `build.js`, and add a browser smoke test.
+- **Fix:**
+  - Give each module its own scope in `build.js`, or rename one of the `attach` functions.
+  - Add a browser smoke test: init → type → `score()` returns non-null.
+  - Two bugs only show up once this is fixed: SDK-f and SDK-g below.
 
 ### P0-8 · One session's score doesn't separate humans from bots, and "time is the moat" isn't in the code · VERIFIED (synthetic populations; the human rates depend on the model)
 The same event streams were fed to all four engines, 200 sessions per population. Synthetic humans were generated keystroke by keystroke with log-normal timing, bigram structure, per-key dwell, word, sentence and thinking pauses, typo corrections and fatigue.
@@ -161,6 +178,16 @@ The same event streams were fed to all four engines, 200 sessions per population
 - **Gradle vs JDK:** the wrapper pins Gradle 8.0, which can't run on JDK 21 ("Unsupported class file major version 65"). Current Android Studio bundles JDK 21. AGP 8.1.0 predates JDK 21 support.
 - **Fix:** delete the `allprojects` repositories block, commit a wrapper for Gradle ≥ 8.7, and move to AGP ≥ 8.2.x (or pin JDK 17).
 
+### P0-10 · The SDK signs nothing, and its trust gates live in the browser · VERIFIED
+- There is no cryptography anywhere in `sdk/src`.
+- The session token is `'jtok_' + btoa(JSON)` (`init.js:250-268`). The code comment says "NOT security — server validates with secret key", but no key, signature or verifier exists, and nothing consumes `jtok_`.
+- **Forging a token:** decoding a token, setting `war:1` and `classification:'verified'`, and re-encoding gives a token indistinguishable from a real one.
+- **The "3 reviews over 3 days" gate** (`init.js:26-45`) reads `localStorage`:
+  - Two `setItem` calls turned a day-0 session into `eligible:true`.
+  - Every `score()` call counts as another "review" (`init.js:212`).
+- **The capture path's `badge_hash`** is a server lookup key over values the client asserts. It is not a signature (P0-5).
+- **Fix:** sign on the server (or with a registered per-site key) over score + nonce + user. Keep first-seen and review counts on the server, tied to an authenticated user.
+
 ---
 
 ## P1 findings
@@ -175,6 +202,10 @@ The same event streams were fed to all four engines, 200 sessions per population
   - SDK and extension apply `paste_heavy` (−0.15), `paste_flood` (−0.30) and a ×(1 − paste ratio) multiplier (SDK `:281-318`, extension `:529-564`).
   - Pasting one 250-character quote makes 91.5% of humans "bot"; three pastes make it 100%.
   - One 65-character quote drops the HUD WAR from 0.60 to 0.48.
+  - In the SDK, with the same typed text each time:
+    - one pasted 39-character URL takes the WGH capture path from 0.60 to **0.47, "bot"**;
+    - a 445-character paragraph takes the engine path from 0.71 to 0.13, "bot".
+  - A "bot" result skips the building gate, so the badge immediately reads "Automated" (`init.js:71`).
   - The spec's length weighting (0.1×/0.3×/1.0×) and `high_paste_volume` flag exist nowhere. VERIFIED.
 - **P1-4 · Two bug fixes from `e84cabf` were lost in the restructure (`53ef9c2`).**
   - The first badge of every install can't be verified: the public key is read before `getOrCreateKeyPair()` creates it (`writer.js:320-329`, `content.js:314-321`).
@@ -254,18 +285,76 @@ The same event streams were fed to all four engines, 200 sessions per population
 ---
 
 ## SDK section
-The SDK is the "current build target" in CLAUDE.md.
+The SDK is the "current build target" in CLAUDE.md. It was driven in Chromium with real form submissions, trusted input (CDP) and synthetic events. A locally patched bundle was used only to look past P0-7; it is not proposed as a commit.
 
-The embedded widget can't start (P0-7). Beyond that:
-- **Signing:** no signed badge exists. The `jtok_` session token is unsigned, and no server consumes it.
-- **Hidden field:** the spec'd `jitter_badge` hidden form field is implemented nowhere.
-- **Day-0 cap:** the SDK has no day-0 cap. The "3 reviews / 3 days" gate is a `localStorage` counter.
-- **Paste:** pasted text is penalized (P1-3).
-- **Input-event bots:** input-event-only bots pass as human (P1-16).
-- **Backspace:** each backspace is counted twice, once in the keydown handler and once in the input handler (`core/jitter-box.js:420, 530`).
-- **Capture meta:** the capture client's `meta` fields (`pasteCount`, `totalFocusMs`, …) don't match what `/attest` reads (`meta.keys`, `meta.paste_chars`, `meta.focus_ms`). SDK profiles therefore always show 0 keystrokes.
-- **Capture on page:** `jitter-capture.js` isn't part of `build.js`, and it has no tests.
-- **Build:** `sdk/dist/jitter.min.js` is in sync with its source; a rebuild is byte-identical. Note that `sdk/dist/` is listed in `.gitignore` but tracked. `sdk/package.json`'s `test` script points at a missing `tests/core.test.js`.
+### JITTER-PLAN §1 done criteria: 0 of 8 met
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Script tag on demo.html auto-attaches | ❌ | No `demo.html` or `jitter-widget.js` exists. A script tag alone attaches nothing, and `init()` crashes (P0-7). |
+| Typing shows the live dot and stats bar | ❌ | The SDK renders nothing while typing; the DOM is unchanged mid-typing. |
+| Submit shows the badge inline (WAR, tier, purity) | ❌ | There is no submit listener. The badge appears only through a manual `createBadge`/`insertBadge`, as a label such as "Human Verified (84%)". |
+| Clicking the badge opens the passport modal | ❌ | The badge has no click handler, and there is no passport code in `sdk/`. |
+| Badge has a valid ECDSA P-256 signature | ❌ | There is no cryptography in `sdk/` (P0-10). |
+| Hidden `jitter_badge` field in form data | ❌ | The captured POST body was `title=&review=…&second=`. |
+| A pasted paragraph appears in stats and isn't hard-penalized | ❌ | A 445-character paste gives 0.13, "bot", and there is no stats UI (P1-3). |
+| Day-0 WAR is capped at 0.35 | ❌ | Day-0 WAR was 0.78, uncapped. Only a `localStorage` "building" label exists. |
+
+### What works in the SDK (VERIFIED)
+- **Build:** `node sdk/build.js` succeeds, and the committed dist is byte-identical to a fresh build.
+- **jitter-capture.js** (the WGH path):
+  - It attaches to `textarea[data-jitter="true"]`, including textareas added dynamically.
+  - It scores through `JitterBox.scoreRaw` and returns war, classification, flags, meta and a Shadow-DOM badge.
+  - Its POST passes `/attest`'s CORS preflight.
+  - It never blocks the host page.
+- **Hard floors** catch constant-rate and uniform-random `press()` bots.
+- **Scripted input:** `el.value=`, `fill()` and paste-only input get no score, rather than a false "human".
+- **Privacy:**
+  - No typed text is stored or sent.
+  - Storage is limited to two `localStorage` keys.
+  - The bundle makes no network requests of its own.
+
+### SDK-specific findings
+- **SDK-a · P1 · The widget layer in the plan doesn't exist.**
+  - There is no submit hook, hidden field, live indicator, automatic badge or passport modal.
+  - `showBadge` and `apiUrl` are never read, and `checkVelocityPatterns` is never called.
+  - `sdk/jitter-widget.js`, `sdk/demo.html` and `sdk/react/` don't exist.
+- **SDK-b · P1 · The capture → Supabase path is broken end to end.**
+  - There is no option to send an auth header, so every call gets a 401 (P0-6).
+  - The code never checks `res.ok`, and `.catch` swallows errors, so failures come back as `badge_hash: null`.
+  - The `meta` keys (`pasteCount`, `totalFocusMs`, …) don't match what `/attest` reads (`meta.keys`, `meta.paste_chars`, `meta.focus_ms`), so profile totals never increase.
+  - `verifyUrl` is unusable (P0-6).
+- **SDK-c · P1 · Mobile and IME typists get no score on the WGH path.**
+  - `jitter-capture.js:83` counts only keydowns where `key.length === 1`. Android-style `Unidentified`/229 events and IME composition give `insufficient_data` (tested with CDP emulation, not a real device).
+  - On the engine path they are scored without dwell data, and IME composition updates are counted as keystrokes (48 for 40 characters).
+- **SDK-d · P1 · Scale, labels, time cap and weights all diverge from the spec.**
+  - WAR is on a 0–1 scale, not 0–10.
+  - There are three label vocabularies:
+    - classifications: verified / suspicious / bot / building;
+    - `badge.js`: "Human Verified" / "Under Review" / "Automated" / "Building Trust";
+    - `jitter-capture.js`: "Verified Human" / "Unverified" / "Suspicious".
+  - There is no time-confidence cap.
+  - The weights (editing 0.05 / dwell_uniformity 0.04 / purity 0.03) differ from the spec and from the lab engine.
+  - On the WGH path, `scoreRaw` fixes 37% of the weight at 0.5, so its maximum is about 0.815 and "verified" is effectively unreachable (P1-18).
+- **SDK-e · P2 · `Jitter.init()` called from `<head>` throws.** It calls `observe(document.body)` while `body` is still null, and doesn't wait for DOMContentLoaded.
+- **SDK-f · P2 · Once P0-7 is fixed, `Jitter.init` disables jitter-capture.** It overwrites `data-jitter="true"` with `"active"` (`init.js:184`), which the capture selector no longer matches.
+- **SDK-g · P2 · Engine accounting bugs** (VERIFIED on the patched bundle):
+  - Each backspace is counted twice, once on keydown and once on input deletion (`jitter-box.js:420-423`, `:529-533`).
+  - `reset()` leaves `lastInputLength` set: after the host page cleared the field, 142 phantom backspaces were recorded.
+  - On contenteditable, a paste is counted by both the paste handler and the observer, so a 68-character paste became 136 pasted characters and a "bot" result.
+  - The input fallback reads `el.value`, which is undefined on contenteditable.
+- **SDK-h · P2 · jitter-capture mismeasures dwell when keys overlap.** It uses keyup minus the *last* keydown rather than the same key's keydown (`:92`, `:100-101`). A very fast typist's true 113 ms mean was measured as 54 ms, and 12–27% of samples fell under the 27 ms bot floor.
+- **SDK-i · P2 · Multiple fields.** `Jitter.score()` with no argument returns the last-attached instance, not the active one. `insertBadge` can remove another field's badge.
+- **SDK-j · P2 · The session token carries the whole profile:** per-key dwell for the ten most common letters, bigram timings with counts, and mouse-path stats. It contains no raw keys, but it's designed for server-side use, which conflicts with Hard Rule #7 ("WAR + badge hash only").
+- **SDK-k · P3 · Build and packaging:**
+  - The dist isn't minified (38.7 KB, 1,158 lines).
+  - `sdk/dist/` is tracked despite `.gitignore`, and `examples/jitter.min.js` isn't committed.
+  - `build.js` leaves `init.js`'s `module.exports` block in the bundle.
+  - The package's `"module"` field points at CommonJS.
+  - The Vercel output has no `index.html`.
+  - `sdk/package.json`'s `test` script points at a missing `tests/core.test.js`.
+
+**SDK ↔ backend:** the main SDK (`init.js`) has no backend integration at all; `apiUrl` is unused, and nothing verifies tokens. The only path to the server is `jitter-capture.js` → `/attest`. It passes the CORS preflight but fails authentication, and its meta keys don't match.
 
 
 ---
@@ -393,6 +482,8 @@ About 13% of shipped code lines (≈650 of 5,140) run under any passing test, an
 | Hard Rule #1 (never store raw keystrokes) | **Holds** for the content script, storage and network, and for Android. The Writer's ledger export stores typed characters and pasted text (P1-5). |
 | Hard Rule #4 (badge ECDSA-signed) | **Signed but not anchored** (P0-2), partly unsigned (P1-4, P1-7), and not on Android (P1-21). |
 | Hard Rule #5 (paste transparent, not punished) | **Violated** in the SDK, extension and HUD (P1-3). |
+| Hard Rule #7 (raw telemetry never leaves; WAR + badge hash only) | **At risk.** The SDK's `jtok_` token is built for server-side use and carries per-key dwell, bigram timings and mouse-path stats (SDK-j). |
+| JITTER-PLAN §1 widget "Done criteria" | **0 of 8 met** (SDK section). |
 | android/README: "Full QWERTY … works everywhere", "Pasting is detected" | **False** (P1-22, P1-23). |
 
 ## Previously reported issues (docs/AUDIT*.md, CODE_REVIEW.md, Feb 2026)
@@ -425,7 +516,10 @@ About 13% of shipped code lines (≈650 of 5,140) run under any passing test, an
    - Compute classification and time caps on the server, and update the profile atomically.
    - Set `verify_jwt=false` on `/verify` and serve it from a custom domain or static host.
    - Unpause the project.
-4. **SDK.** Fix the `attach` collision, add a browser smoke test, and implement the `jitter_badge` field.
+4. **SDK.**
+   - Fix the `attach` collision, the bugs it's hiding (SDK-f, SDK-g) and the `<head>` init crash (SDK-e), and add a browser smoke test.
+   - Build the widget layer the plan describes: submit hook → server-signed badge → hidden `jitter_badge` → inline badge.
+   - Add the auth header and `res.ok` handling to jitter-capture, and align its meta keys with `/attest`.
 5. **Engine.**
    - Keep one engine module.
    - Remove the paste penalties (Hard Rule #5).
@@ -450,6 +544,7 @@ Methods:
 - **Extension:** the real unpacked MV3 extension in Chromium 141 under Xvfb, driven by Playwright and CDP, with local test pages on two origins (with CSP headers). All Supabase traffic was intercepted; production was never called.
 - **Backend:** migrations applied in PGlite (Postgres 17) with Supabase roles emulated. The functions ran unmodified under Deno with shimmed imports.
 - **Engine:** the same event streams were fed to all four engines, cross-checked against Chromium, with scipy for the statistics.
+- **SDK:** driven in Chromium with real form submissions, trusted input (CDP) and synthetic events. A local attest mock emulated the platform's 401. A locally patched bundle was used only to look past P0-7.
 - **Android:** type-checked against the Android 14 framework (Robolectric `android-all`).
 - **Deployed state:** Supabase management API, read-only.
 
