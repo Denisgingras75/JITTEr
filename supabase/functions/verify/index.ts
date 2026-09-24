@@ -1,5 +1,15 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { keyIdFromDeviceId } from '../_shared/trust.ts'
+
+// GET /verify?hash=<badge_hash>            -> HTML page
+// GET /verify?hash=<badge_hash>&format=json -> the attestation record
+//
+// Public (verify_jwt = false): the page is opened by plain links. Data is
+// read with the service role inside the function; the tables allow the anon
+// role nothing.
+
+const corsHeaders = { 'Access-Control-Allow-Origin': '*' }
 
 // Everything interpolated into the page comes from the database, and the
 // database is written from client-supplied values: escape it all.
@@ -9,16 +19,14 @@ const esc = (v: unknown): string =>
 serve(async (req) => {
   const url = new URL(req.url)
   const badge_hash = url.searchParams.get('hash')
+  const wantJson = url.searchParams.get('format') === 'json'
 
   // badge_hash is a hex SHA-256; anything else can't match a row.
   if (!badge_hash || !/^[0-9a-f]{64}$/i.test(badge_hash)) {
-    return new Response(renderPage(null, null, badge_hash ? 'Badge not found' : 'No badge hash provided'), {
-      headers: { 'Content-Type': 'text/html' }
-    })
+    const msg = badge_hash ? 'Badge not found' : 'No badge hash provided'
+    return wantJson ? jsonResponse(404, { error: msg }) : htmlResponse(renderPage(null, null, msg))
   }
 
-  // The tables allow no access to the anon role (RLS, no policies), so this
-  // lookup runs as the service role. The key never leaves the function.
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -26,14 +34,12 @@ serve(async (req) => {
 
   const { data, error } = await supabase
     .from('attestations')
-    .select('war_score, classification, flags, site_key, created_at, user_id')
+    .select('war_score, war_client, classification, flags, site_key, created_at, user_id, device_id, time_cap, age_days, server_signature, text_hash, url')
     .eq('badge_hash', badge_hash.toLowerCase())
     .single()
 
   if (error || !data) {
-    return new Response(renderPage(null, null, 'Badge not found'), {
-      headers: { 'Content-Type': 'text/html' }
-    })
+    return wantJson ? jsonResponse(404, { error: 'Badge not found' }) : htmlResponse(renderPage(null, null, 'Badge not found'))
   }
 
   const { data: profile } = await supabase
@@ -42,10 +48,43 @@ serve(async (req) => {
     .eq('user_id', data.user_id)
     .single()
 
-  return new Response(renderPage(data, profile, null), {
-    headers: { 'Content-Type': 'text/html' }
-  })
+  if (wantJson) {
+    const deviceId = data.device_id ?? null
+    return jsonResponse(200, {
+      attestation: {
+        badge_hash: badge_hash.toLowerCase(),
+        device_id: deviceId,
+        key_id: deviceId ? keyIdFromDeviceId(deviceId) : null,
+        site_key: data.site_key,
+        war: Number(data.war_score),
+        war_client: data.war_client == null ? null : Number(data.war_client),
+        time_cap: data.time_cap == null ? null : Number(data.time_cap),
+        age_days: data.age_days ?? null,
+        classification: data.classification,
+        flags: Array.isArray(data.flags) ? data.flags : [],
+        text_hash: data.text_hash ?? null,
+        url: data.url ?? null,
+        attested_at: data.created_at,
+      },
+      server_signature: data.server_signature ?? null,
+      profile: profile ? {
+        badges: profile.total_badges, avg_war: Number(profile.avg_war), best_war: Number(profile.best_war),
+        level: profile.level, first_seen: profile.first_seen, sites_used: profile.sites_used || [],
+        total_keystrokes: Number(profile.total_keystrokes) || 0,
+      } : null,
+    })
+  }
+
+  return htmlResponse(renderPage(data, profile, null))
 })
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+}
+
+function htmlResponse(html: string): Response {
+  return new Response(html, { headers: { 'Content-Type': 'text/html' } })
+}
 
 function renderPage(data: any, profile: any, errorMsg: string | null): string {
   if (errorMsg) {
@@ -58,14 +97,17 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
 
   const war = Number(data.war_score)
   const flags: string[] = Array.isArray(data.flags) ? data.flags : []
+  const cls = String(data.classification)
 
-  const color = war >= 0.80 ? '#00BA7C'
-    : war >= 0.50 ? '#F59E0B'
+  const color = cls === 'verified' ? '#00BA7C'
+    : cls === 'building' || cls === 'suspicious' ? '#F59E0B'
     : '#EF4444'
 
-  const label = war >= 0.80 ? 'Verified Human'
-    : war >= 0.50 ? 'Unverified'
-    : 'Suspicious'
+  const label = cls === 'verified' ? 'Verified Human'
+    : cls === 'building' ? 'Building Trust'
+    : cls === 'suspicious' ? 'Unverified'
+    : cls === 'bot' ? 'Suspicious'
+    : 'Insufficient Data'
 
   const date = new Date(data.created_at).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric'
@@ -76,6 +118,13 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   const memberSince = profile?.first_seen
     ? new Date(profile.first_seen).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
     : null
+
+  const ageLine = data.age_days != null
+    ? `<div class="stat"><span class="label">Device age when attested</span><strong>${esc(data.age_days)} day${data.age_days === 1 ? '' : 's'} (cap ${esc(Math.round(Number(data.time_cap) * 100))}%)</strong></div>`
+    : ''
+  const serverLine = data.server_signature
+    ? `<div class="stat"><span class="label">Server signature</span><strong>present</strong></div>`
+    : ''
 
   const profileSection = profile ? `
   <div style="margin-top:32px;padding-top:24px;border-top:2px solid #eee">
@@ -108,10 +157,12 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   <h2>JITTEr Badge Verification</h2>
   <p><span class="badge"><span class="dot"></span>${label}</span></p>
   <div style="margin-top:24px">
-    <div class="stat"><span class="label">WAR Score</span><strong>${esc(data.war_score)}</strong></div>
-    <div class="stat"><span class="label">Classification</span><strong>${esc(data.classification)}</strong></div>
+    <div class="stat"><span class="label">WAR Score</span><strong>${esc(war)}${data.war_client != null && Number(data.war_client) !== war ? ' (typing score ' + esc(data.war_client) + ', capped by device age)' : ''}</strong></div>
+    <div class="stat"><span class="label">Classification</span><strong>${esc(cls)}</strong></div>
     <div class="stat"><span class="label">Platform</span><strong>${esc(String(data.site_key).toUpperCase())}</strong></div>
     <div class="stat"><span class="label">Attested</span><strong>${esc(date)}</strong></div>
+    ${ageLine}
+    ${serverLine}
     ${flags.length > 0 ? `<div class="stat"><span class="label">Flags</span><strong>${esc(flags.join(', '))}</strong></div>` : ''}
   </div>
   ${profileSection}

@@ -21,6 +21,13 @@ async function openWriter(page) {
     body: '// googleapis mock',
   }));
 
+  // The attestation server is not part of these tests
+  await page.route('https://*.supabase.co/**', route => route.fulfill({
+    status: 503,
+    contentType: 'application/json',
+    body: '{"error":"unavailable in tests"}',
+  }));
+
   // Inject Chrome mock before any script runs
   await page.addInitScript(CHROME_MOCK);
 

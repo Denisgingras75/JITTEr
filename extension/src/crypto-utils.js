@@ -2,8 +2,54 @@
 // Uses Web Crypto API for ECDSA signatures (no external dependencies)
 
 const CryptoUtils = {
+    // The server's countersigning public key. Paste the output of
+    // supabase/scripts/gen-server-key.mjs here; null means server signatures
+    // are reported as "unchecked" rather than verified.
+    SERVER_PUBLIC_JWK: null,
+
+    // Fields added to a badge after it was signed by the device. The device
+    // signature covers everything else.
+    UNSIGNED_FIELDS: ['signature', 'attestation', 'server_signature', 'server_key_id'],
+
+    // --- Device key (real extension) ---
+    // In the extension the key pair lives in the service worker, non-extractable
+    // (see background.js). Outside it (tests, plain pages) the storage-backed
+    // key pair below is used instead.
+    _device: undefined,
+    async deviceKey() {
+        if (this._device !== undefined) return this._device;
+        this._device = null;
+        try {
+            if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) return null;
+            const info = await new Promise((resolve) => {
+                const timer = setTimeout(() => resolve(null), 3000);
+                try {
+                    chrome.runtime.sendMessage({ action: 'deviceKey' }, (res) => {
+                        clearTimeout(timer);
+                        resolve(chrome.runtime.lastError ? null : res);
+                    });
+                } catch (e) { clearTimeout(timer); resolve(null); }
+            });
+            if (info && info.jwk) this._device = info;
+        } catch (e) {}
+        return this._device;
+    },
+
+    async signWithDevice(dataString) {
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => resolve(null), 5000);
+            try {
+                chrome.runtime.sendMessage({ action: 'sign', data: dataString }, (res) => {
+                    clearTimeout(timer);
+                    resolve(!chrome.runtime.lastError && res && res.signature ? res.signature : null);
+                });
+            } catch (e) { clearTimeout(timer); resolve(null); }
+        });
+    },
+
     // Generate or retrieve user's key pair
     async getOrCreateKeyPair() {
+        if (await this.deviceKey()) return { serviceWorker: true };
         try {
             // Try to load existing keys from storage
             const stored = await chrome.storage.local.get(['jitterPrivateKey', 'jitterPublicKey']);
@@ -58,6 +104,8 @@ const CryptoUtils = {
 
     // Get the stored public key JWK (for embedding in badges)
     async getPublicKeyJwk() {
+        const device = await this.deviceKey();
+        if (device) return device.jwk;
         try {
             const stored = await chrome.storage.local.get(['jitterPublicKey']);
             return stored.jitterPublicKey || null;
@@ -69,6 +117,8 @@ const CryptoUtils = {
     // Create a fingerprint of the public key (for badge identification)
     // Uses raw EC point bytes for a canonical, order-independent hash
     async getPublicKeyFingerprint() {
+        const device = await this.deviceKey();
+        if (device) return device.keyId;
         try {
             const stored = await chrome.storage.local.get(['jitterPublicKey']);
             if (!stored.jitterPublicKey) return null;
@@ -108,10 +158,12 @@ const CryptoUtils = {
     // Sign badge data
     async signBadge(badgeData) {
         try {
+            const dataString = CryptoUtils.canonicalJson(badgeData);
+            if (await this.deviceKey()) return await this.signWithDevice(dataString);
+
             const keyPair = await this.getOrCreateKeyPair();
             if (!keyPair) return null;
 
-            const dataString = CryptoUtils.canonicalJson(badgeData);
             const encoder = new TextEncoder();
             const data = encoder.encode(dataString);
 
@@ -179,6 +231,71 @@ const CryptoUtils = {
     },
 
     // Hash previous badge to create chain
+    // --- Content binding and server attestation ---
+
+    async sha256Hex(text) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    },
+
+    // Hash of the certified text. Line endings and outer whitespace are
+    // normalised so the same text pasted elsewhere still matches.
+    async textHash(text) {
+        return this.sha256Hex(String(text).replace(/\r\n?/g, '\n').trim());
+    },
+
+    // SHA-256 of the raw public key: the id the attestation server uses.
+    async deviceIdFromJwk(jwk) {
+        try {
+            const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
+                { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
+            const raw = await crypto.subtle.exportKey('raw', key);
+            const digest = await crypto.subtle.digest('SHA-256', raw);
+            return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (error) {
+            return null;
+        }
+    },
+
+    // POST a signed badge to the attestation server. Returns the parsed
+    // response or null; never throws, never blocks the badge copy.
+    async attest(url, siteKey, badge, signature) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ site_key: siteKey, badge, signature }),
+                signal: controller.signal,
+            });
+            const data = await res.json().catch(() => null);
+            return res.ok && data && data.badge_hash ? data : null;
+        } catch (error) {
+            return null;
+        } finally {
+            clearTimeout(timer);
+        }
+    },
+
+    // 'valid' | 'invalid' | 'unchecked' (no server key configured)
+    async verifyServerSignature(attestation, signatureBase64) {
+        if (!this.SERVER_PUBLIC_JWK) return 'unchecked';
+        try {
+            const ok = await this.verifyBadge(attestation, signatureBase64, this.SERVER_PUBLIC_JWK);
+            return ok ? 'valid' : 'invalid';
+        } catch (error) {
+            return 'invalid';
+        }
+    },
+
+    // Split a badge into what the device signed and what was added afterwards.
+    signedPart(badge) {
+        const out = {};
+        for (const k of Object.keys(badge)) if (!this.UNSIGNED_FIELDS.includes(k)) out[k] = badge[k];
+        return out;
+    },
+
     async hashBadge(badgeBase64) {
         try {
             const encoder = new TextEncoder();

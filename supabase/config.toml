@@ -387,3 +387,7 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # The verification page is opened by plain links, which can't carry a JWT.
 # Its data comes from the database via the service role inside the function.
 verify_jwt = false
+
+[functions.attest]
+# The device signature inside the body is the credential; there is no login.
+verify_jwt = false

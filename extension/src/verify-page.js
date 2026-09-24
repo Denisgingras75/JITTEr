@@ -82,17 +82,39 @@ async function verifyBadge() {
         // Strip signature to reconstruct what was originally signed.
         let cryptoStatus = 'unsigned'; // 'unsigned' | 'valid' | 'invalid'
         if (raw.signature && raw.publicKeyJwk) {
-            const { signature, ...payloadWithoutSignature } = raw;
             try {
                 const isValid = await CryptoUtils.verifyBadge(
-                    payloadWithoutSignature,
-                    signature,
+                    CryptoUtils.signedPart(raw),
+                    raw.signature,
                     raw.publicKeyJwk
                 );
                 cryptoStatus = isValid ? 'valid' : 'invalid';
             } catch (e) {
                 cryptoStatus = 'invalid';
             }
+        }
+
+        // --- SERVER ATTESTATION ---
+        // The server's record: device age, the cap it applied, its verdict,
+        // countersigned with the server key. Must agree with the badge itself.
+        let serverStatus = 'none'; // 'none' | 'mismatch' | 'unsigned' | 'unchecked' | 'valid' | 'invalid'
+        const att = raw.attestation && typeof raw.attestation === 'object' ? raw.attestation : null;
+        if (att) {
+            const deviceId = raw.publicKeyJwk ? await CryptoUtils.deviceIdFromJwk(raw.publicKeyJwk) : null;
+            const consistent = (att.text_hash == null || att.text_hash === raw.text_hash)
+                && (att.device_id == null || att.device_id === deviceId)
+                && (att.war_client == null || Number(att.war_client) === Number(raw.war_uncapped != null ? raw.war_uncapped : raw.war));
+            if (!consistent) serverStatus = 'mismatch';
+            else if (!raw.server_signature) serverStatus = 'unsigned';
+            else serverStatus = await CryptoUtils.verifyServerSignature(att, raw.server_signature);
+        }
+
+        // --- TEXT CHECK ---
+        // If the teacher pasted the submitted text, compare it with the hash the badge was bound to.
+        let textStatus = 'none'; // 'none' | 'unbound' | 'match' | 'mismatch'
+        const pastedText = (document.getElementById('text-input') || {}).value || '';
+        if (pastedText.trim()) {
+            textStatus = raw.text_hash ? ((await CryptoUtils.textHash(pastedText)) === raw.text_hash ? 'match' : 'mismatch') : 'unbound';
         }
 
         // Everything below is rendered with innerHTML: escape all strings first.
@@ -112,6 +134,20 @@ async function verifyBadge() {
 
         const headerTitle = cryptoStatus === 'valid' ? 'Badge Verified ✅' : cryptoStatus === 'invalid' ? 'Badge Invalid ❌' : 'Badge Decoded (Unsigned)';
 
+        const banner = (color, icon, title, note) =>
+            `<div style="background:${color}11;border:2px solid ${color};border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">${icon}</span><div><div style="font-weight:bold;color:${color};">${title}</div><div style="font-size:12px;color:#888;margin-top:2px;">${note}</div></div></div>`;
+        const attInfo = att ? `Device ${data.attestation.key_id || '—'} · ${data.attestation.age_days ?? '?'} day${data.attestation.age_days === 1 ? '' : 's'} old when attested · cap ${att.time_cap != null ? Math.round(Number(att.time_cap) * 100) + '%' : '—'} · server verdict: ${data.attestation.classification || '—'}` : '';
+        const serverBanner = serverStatus === 'valid' ? banner('#00F0FF', '🏛️', 'SERVER-ATTESTED — countersignature verified', attInfo)
+            : serverStatus === 'unchecked' ? banner('#FFD700', '🏛️', 'SERVER-ATTESTED — countersignature not checked', attInfo + ' · no server key configured in this verifier')
+            : serverStatus === 'unsigned' ? banner('#FFD700', '🏛️', 'SERVER-ATTESTED — no countersignature', attInfo)
+            : serverStatus === 'invalid' ? banner('#FF0055', '🚨', 'SERVER COUNTERSIGNATURE INVALID', 'The attestation does not carry a valid server signature.')
+            : serverStatus === 'mismatch' ? banner('#FF0055', '🚨', 'ATTESTATION DOES NOT MATCH THIS BADGE', 'The server record was issued for a different text, device or score.')
+            : banner('#666', '📴', 'NOT SERVER-ATTESTED', 'Offline badge: the device age and cap could not be confirmed by the server.');
+        const textBanner = textStatus === 'match' ? banner('#00F0FF', '📝', 'TEXT MATCHES THE BADGE', 'The pasted text is what this badge was minted for.')
+            : textStatus === 'mismatch' ? banner('#FF0055', '📝', 'TEXT DOES NOT MATCH THE BADGE', 'This badge was minted for a different text.')
+            : textStatus === 'unbound' ? banner('#FFD700', '📝', 'BADGE IS NOT BOUND TO A TEXT', 'This badge was minted without a text hash, so it cannot be tied to the submission.')
+            : '';
+
         let html = `
             <div class="result-card">
                 <div class="result-header">
@@ -121,6 +157,8 @@ async function verifyBadge() {
                     </div>
                 </div>
                 ${cryptoBanner}
+                ${serverBanner}
+                ${textBanner}
 
                 ${data.war != null ? `
                 <div class="metric-grid">

@@ -13,6 +13,9 @@
  */
 
 // --- WRITING LEDGER ---
+const ATTEST_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/attest";
+const VERIFY_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/verify";
+
 const ledger = {
     ops: [],           // append-only operation timeline
     checkpoints: [],   // content snapshots every 10 ops, hash-chained
@@ -332,6 +335,7 @@ async function exportBadge() {
 
     // WAR score
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const warUncapped = warResult ? warResult.war : null; // applyTimeCap caps in place
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
 
     const payload = {
@@ -341,6 +345,7 @@ async function exportBadge() {
         timestamp: Date.now(),
         // WAR (v3.0)
         war: cappedWar ? cappedWar.war : null,
+        war_uncapped: warUncapped, // typing score after penalties, before the client-side age cap
         raw_war: cappedWar ? cappedWar.raw_war : null,
         war_tier: cappedWar ? cappedWar.tier : null,
         time_cap: cappedWar ? cappedWar.timeCap : null,
@@ -386,13 +391,25 @@ async function exportBadge() {
         // Crypto chain
         previousBadge: previousBadgeHash,
         publicKeyId: publicKeyFingerprint,
-        publicKeyJwk: publicKeyJwk
+        publicKeyJwk: publicKeyJwk,
+        // Content binding
+        text_hash: typeof CryptoUtils !== 'undefined' ? await CryptoUtils.textHash(editor.innerText) : null,
+        url: 'jitter://writer',
+        minted_at: new Date().toISOString()
     };
 
-    // Sign the payload
+    // Sign with the device key, then attest (server-side age cap and countersignature)
+    let verifyHref = null;
     if (typeof CryptoUtils !== 'undefined') {
         signature = await CryptoUtils.signBadge(payload);
         if (signature) {
+            const res = await CryptoUtils.attest(ATTEST_URL, 'writer', payload, signature);
+            if (res) {
+                payload.attestation = res.attestation;
+                payload.server_signature = res.server_signature || null;
+                payload.server_key_id = res.server_key_id || null;
+                verifyHref = `${VERIFY_URL}?hash=${res.badge_hash}`;
+            }
             payload.signature = signature;
         }
     }
@@ -408,7 +425,7 @@ async function exportBadge() {
         await CryptoUtils.storeBadgeHash(base64);
     }
     
-    const url = `#jitter:${base64}`;
+    const url = verifyHref || `#jitter:${base64}`;
     const htmlBadge = `<a href="${url}" style="text-decoration:none;" data-jitter-payload="${base64}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${blockID}</span></a>`;
     const plainBadge = `\n\n[ JITTER-BLOCK: 0x${blockID} | INT:${integrity}% | RATIO:${payload.cr} ]`;
 

@@ -6,8 +6,11 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "npm run test:unit && npm run test:e2e",
+    "test": "npm run test:unit && npm run test:backend && npm run test:e2e",
     "test:unit": "node tests/war-scorer.test.js && node tests/crypto-utils.test.js && node tests/wgh-widget.test.js && node tests/sdk.test.js && node tests/bot-battery.test.js && node tests/ideas-audit.test.js",
+    "test:backend": "deno run -A --import-map=supabase/tests/import_map.json supabase/tests/run.ts",
+    "typecheck:backend": "deno check --import-map=supabase/tests/import_map.typecheck.json supabase/functions/attest/index.ts supabase/functions/verify/index.ts",
+    "dev:functions": "deno run -A --import-map=supabase/tests/import_map.json supabase/tests/serve.ts",
     "test:e2e": "playwright test",
     "test:student": "playwright test tests/student-essay.spec.js",
     "test:teacher": "playwright test tests/teacher-verify.spec.js",
@@ -25,6 +28,9 @@
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.52.0",
-    "playwright-core": "^1.52.0"
+    "playwright-core": "^1.52.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "deno": "^2.9.6",
+    "@supabase/supabase-js": "^2.45.0"
   }
 }

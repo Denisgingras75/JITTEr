@@ -128,6 +128,15 @@ window.addEventListener('paste', (e) => {
     if(!isIframe) updateUI();
 }, true);
 
+function certifiedText() {
+    let target = lastActiveElement;
+    if (!target || !document.contains(target)) target = document.activeElement;
+    if (!target || target.tagName === 'BODY' || target.tagName === 'HTML') return null;
+    if (target.value !== undefined) return target.value;
+    if (target.isContentEditable) return target.innerText;
+    return null;
+}
+
 function calculateStats() {
     let target = lastActiveElement;
     if (!target || !document.contains(target)) target = document.activeElement;
@@ -378,6 +387,7 @@ async function copyBadge(s, a) {
 
     // WAR score
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const warUncapped = warResult ? warResult.war : null; // applyTimeCap caps in place
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
 
     const p = {
@@ -387,6 +397,7 @@ async function copyBadge(s, a) {
         timestamp: Date.now(),
         // WAR (v3.0)
         war: cappedWar ? cappedWar.war : null,
+        war_uncapped: warUncapped, // typing score after penalties, before the client-side age cap
         raw_war: cappedWar ? cappedWar.raw_war : null,
         war_tier: cappedWar ? cappedWar.tier : null,
         time_cap: cappedWar ? cappedWar.timeCap : null,
@@ -429,49 +440,41 @@ async function copyBadge(s, a) {
         publicKeyJwk: publicKeyJwk
     };
 
-    // Sign the payload
+    // Bind the badge to what it certifies: the text in the field that was
+    // typed into, and where. A badge can't be moved to a different text.
+    const certified = certifiedText();
+    p.text_hash = certified != null && typeof CryptoUtils !== 'undefined' ? await CryptoUtils.textHash(certified) : null;
+    p.url = location.origin + location.pathname;
+    p.minted_at = new Date().toISOString();
+
+    // Sign with the device key
+    let signature = null;
     if (typeof CryptoUtils !== 'undefined') {
-        const signature = await CryptoUtils.signBadge(p);
-        if (signature) p.signature = signature;
+        signature = await CryptoUtils.signBadge(p);
+    }
+
+    // Attest: the server registers the device, applies the age-based cap and
+    // countersigns. Adds nothing the device signed over; never blocks the copy.
+    let verifyHref = null;
+    if (signature) {
+        const res = await CryptoUtils.attest(ATTEST_URL, 'extension', p, signature);
+        if (res) {
+            p.attestation = res.attestation;
+            p.server_signature = res.server_signature || null;
+            p.server_key_id = res.server_key_id || null;
+            verifyHref = `${VERIFY_URL}?hash=${res.badge_hash}`;
+        }
+        p.signature = signature;
     }
 
     const b = btoa(JSON.stringify(p));
     const badgeHash = typeof CryptoUtils !== 'undefined' ? await CryptoUtils.hashBadge(b) : null;
     const id = (badgeHash || b).slice(0, 6).toUpperCase();
+    if (!verifyHref) verifyHref = `${ANCHOR_PREFIX}${b}`;
 
     // Store badge hash for chain
     if (typeof CryptoUtils !== 'undefined') {
         await CryptoUtils.storeBadgeHash(b);
-    }
-
-    // Get user_id from storage for attestation
-    let userId = 'anon';
-    try {
-        const stored = await new Promise(r => chrome.storage.local.get('jitter_user_id', r));
-        if (stored.jitter_user_id) userId = stored.jitter_user_id;
-    } catch (e) {}
-
-    // POST to attestation server — never blocks badge copy
-    let verifyHref = `${ANCHOR_PREFIX}${b}`;
-    try {
-        const attestRes = await fetch(ATTEST_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_id: userId,
-                site_key: 'extension',
-                war_score: p.war || 0,
-                classification: p.war >= 0.80 ? 'verified' : p.war >= 0.50 ? 'suspicious' : 'bot',
-                flags: p.war_flags || [],
-                meta: { integrity: p.integrity, keys: p.keys, pastes: p.pastes, sessions: p.sessions },
-            })
-        });
-        const attestData = await attestRes.json();
-        if (attestData.badge_hash) {
-            verifyHref = `${VERIFY_URL}?hash=${attestData.badge_hash}`;
-        }
-    } catch (e) {
-        // Attestation failed silently — use fallback anchor
     }
 
     const h = `<a href="${verifyHref}" style="text-decoration:none;" data-jitter-payload="${b}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER: 0x${id}</span></a>`;
