@@ -3,6 +3,7 @@ package com.anvil.keyboard
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import java.security.MessageDigest
 import java.util.Base64
@@ -16,6 +17,7 @@ import kotlin.math.sqrt
  * - Touch pressure (where supported)
  * - Typing rhythm patterns
  * - Session statistics
+ * - Tap motion evidence (aggregates from TapMotionAnalyzer; never raw sensor data)
  */
 class BiometricTracker(context: Context) {
     
@@ -33,6 +35,7 @@ class BiometricTracker(context: Context) {
     // Lifetime passport data
     private var totalKeystrokes: Long = 0
     private var level: String = "Novice"
+    private var motionProfile = MotionProfile()
     
     init {
         loadPassport()
@@ -93,6 +96,25 @@ class BiometricTracker(context: Context) {
         pastedChars += charCount
     }
     
+    /**
+     * Folds a finished keyboard session's motion aggregates into the lifetime profile.
+     * Sessions without usable sensor data still update "last session" but don't dilute the lifetime rates.
+     */
+    fun recordMotionSession(result: MotionSessionResult) {
+        val summary = result.summary
+        val usable = TapMotionAnalyzer.FLAG_NO_MOTION_DATA !in summary.flags &&
+            TapMotionAnalyzer.FLAG_LOW_SAMPLE_RATE !in summary.flags
+        if (usable) {
+            motionProfile.sessions++
+            motionProfile.tapsAnalyzed += summary.tapsAnalyzed
+            motionProfile.tapsWithImpulse += summary.tapsWithImpulse
+            motionProfile.accelPeak.merge(result.accelPeak)
+            motionProfile.latencyMs.merge(result.latencyMs)
+        }
+        motionProfile.lastSession = summary
+        saveMotionProfile()
+    }
+    
     // ============ CALCULATIONS ============
     
     fun calculatePurity(): Int {
@@ -148,7 +170,8 @@ class BiometricTracker(context: Context) {
             avgPressure = session.avgPressure,
             duration = session.duration,
             timestamp = timestamp,
-            level = level
+            level = level,
+            motion = motionProfile.lastSession?.let { MotionBadge.fromSession(it) }
         )
         
         val json = gson.toJson(payload)
@@ -175,7 +198,8 @@ class BiometricTracker(context: Context) {
             avgPressure = 0f,
             duration = 0,
             timestamp = timestamp,
-            level = level
+            level = level,
+            motion = MotionBadge.fromProfile(motionProfile)
         )
         
         val json = gson.toJson(payload)
@@ -207,6 +231,17 @@ class BiometricTracker(context: Context) {
         totalKeystrokes = prefs.getLong("total_keystrokes", 0)
         level = prefs.getString("level", "Novice") ?: "Novice"
         updateLevel()
+        motionProfile = try {
+            prefs.getString("motion_profile", null)?.let { gson.fromJson(it, MotionProfile::class.java) }
+        } catch (e: JsonSyntaxException) {
+            null
+        } ?: MotionProfile()
+    }
+    
+    private fun saveMotionProfile() {
+        prefs.edit()
+            .putString("motion_profile", gson.toJson(motionProfile))
+            .apply()
     }
     
     // ============ GETTERS ============
@@ -216,6 +251,7 @@ class BiometricTracker(context: Context) {
     fun getTotalKeystrokes(): Long = totalKeystrokes
     fun getLevel(): String = level
     fun getFlightTimeCount(): Int = flightTimes.size
+    fun getMotionProfile(): MotionProfile = motionProfile
 }
 
 // ============ DATA CLASSES ============
@@ -241,7 +277,8 @@ data class BadgePayload(
     val avgPressure: Float,
     val duration: Long,
     val timestamp: Long,
-    val level: String
+    val level: String,
+    val motion: MotionBadge? = null
 )
 
 data class BadgeData(
@@ -249,3 +286,51 @@ data class BadgeData(
     val encoded: String,
     val hash: String
 )
+
+/** Lifetime tap-motion evidence, persisted as JSON. Aggregates only. */
+class MotionProfile {
+    var sessions: Int = 0
+    var tapsAnalyzed: Long = 0
+    var tapsWithImpulse: Long = 0
+    var accelPeak: RunningStats = RunningStats()
+    var latencyMs: RunningStats = RunningStats()
+    var lastSession: MotionSummary? = null
+
+    val impulseRate: Double
+        get() = if (tapsAnalyzed > 0) tapsWithImpulse.toDouble() / tapsAnalyzed else 0.0
+
+    val evidence: String
+        get() = TapMotionAnalyzer.classify(tapsAnalyzed, impulseRate)
+}
+
+/** The motion part of a badge: a handful of aggregates, nothing per tap. */
+data class MotionBadge(
+    val evidence: String,
+    val tapsAnalyzed: Long,
+    val impulseRate: Double,
+    val joltMean: Double,       // m/s^2
+    val joltCv: Double,
+    val latencyMsMean: Double
+) {
+    companion object {
+        fun fromSession(s: MotionSummary) = MotionBadge(
+            evidence = s.evidence,
+            tapsAnalyzed = s.tapsAnalyzed.toLong(),
+            impulseRate = s.impulseRate,
+            joltMean = s.accelPeakMean,
+            joltCv = s.accelPeakCv,
+            latencyMsMean = s.latencyMsMean
+        )
+
+        fun fromProfile(p: MotionProfile) = MotionBadge(
+            evidence = p.evidence,
+            tapsAnalyzed = p.tapsAnalyzed,
+            impulseRate = round3(p.impulseRate),
+            joltMean = round3(p.accelPeak.mean),
+            joltCv = round3(p.accelPeak.cv),
+            latencyMsMean = round3(p.latencyMs.mean)
+        )
+
+        private fun round3(v: Double): Double = if (v.isFinite()) Math.round(v * 1000) / 1000.0 else 0.0
+    }
+}
