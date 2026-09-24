@@ -46,29 +46,43 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 
 ## Fix status on this branch
 
-Fixed and verified (commits `7e99607`, `5d7cd77`, `90231bf`, and the backend commit that follows):
+The branch now carries the fixes below (see `docs/architecture/TRUST_LAYER.md` for the design). "Deploy" means the Supabase project is paused, so the server-side pieces are tested locally (PGlite + Deno) but not yet deployed.
 
 | Finding | Status |
 |---|---|
-| P0-1 Writer/Verify pages can't run | Fixed. Both load in a real MV3 extension; 31/31 E2E pass. |
-| P0-3 Page script can pass as a human | Fixed in the extension and the SDK: untrusted events, auto-repeat and scripted clicks are ignored. |
-| P0-4 Crafted badge link runs script | Fixed. All badge fields are escaped; the certificate checks the signature first and shows VALID / INVALID / UNSIGNED. |
-| P0-5 Direct writes with the anon key | Fixed (migration, not yet deployed). `/attest` still trusts the client: needs the identity decision. |
-| P0-6 No recipient can verify | Partly. `verify_jwt = false` for `/verify` (not yet deployed). The `*.supabase.co` text/plain rewrite still needs a custom domain or static host. `attest` still needs an auth model. |
-| P0-7 SDK `attach` recursion | Fixed. Browser smoke test added. |
+| P0-1 Writer/Verify pages can't run | Fixed. Both load in a real MV3 extension; the page tests pass. |
+| P0-2 Forged badges verify | Addressed. Trust is anchored on the server: badges are signed by a device key held in the service worker, and the verify page shows whether the server attested the badge (device age, cap, verdict) and whether the server countersignature checks out. A self-signed badge with no attestation says NOT SERVER-ATTESTED; an edited attestation fails the countersignature. |
+| P0-3 Page script can pass as a human | Fixed in the extension, the SDK core and jitter-capture: untrusted events, auto-repeat and scripted clicks are ignored. |
+| P0-4 Crafted badge link runs script | Fixed. All badge fields are escaped; the certificate checks the signature first. |
+| P0-5 Backend accepts forged attestations | Fixed (deploy). Tables closed to the anon key; `/attest` requires a device-signed badge, rate-limits per device, applies the age cap from its own records and countersigns. |
+| P0-6 No recipient can verify | Mostly fixed (deploy). `verify_jwt` off for both functions (the device signature is the credential); `/verify` public with `format=json`. Still needed: a custom domain or static host for the HTML page. |
+| P0-7 SDK `attach` recursion | Fixed. Browser smoke tests added. |
+| P0-8 Scoring weak; no time moat in code | Time moat now in code: server-side device age cap (plan's step table), per-device rate limit, replay guard. Single-session discrimination unchanged: needs real sessions to recalibrate. |
+| P0-9 Android can't build | Build configuration fixed and the Gradle wrapper committed; the full build still needs a machine with the Android SDK. |
+| P0-10 SDK signs nothing | Fixed for jitter-capture (device key, signed and bound badge, attestation). `Jitter.init`'s `jtok_` token is still unsigned. |
 | P1-1 Badge WAR drops penalties | Fixed. |
-| P1-4 First badge unsigned / replay first click | Fixed (extension and content script). |
-| P1-6 verify.html renders unescaped HTML | Fixed. |
-| P1-7 Signature skips nested fields | Fixed: canonical serialization, unit-tested. |
-| P1-14 `/verify` stored HTML injection | Fixed. |
-| P1-20 Tests don't protect anything | Partly: `npm test` runs the unit tests and 38 Playwright tests and fails when they fail. Still no CI; `bot-battery` still flaky. |
-| SDK-b `res.ok` / meta keys | Not yet. |
-| SDK-e `<head>` init, SDK-f marker, SDK-g double backspace / reset | Fixed. |
-| P2 non-Latin-1 locales can't mint, held key flips to SYNTHETIC | Fixed. |
-| P3 near-constant badge ID | Fixed (hash of the payload). |
-| BE-6 anon can list everything | Fixed by the same migration. |
-
-Everything else in the report is still open. See the summary at the end of the conversation for the decisions the remaining P0s depend on.
+| P1-2 Badge not bound to text/page | Fixed: `text_hash` + `url` in the signed payload; verify page checks pasted text against the hash. |
+| P1-3 Paste penalized | Fixed: one shared engine weights each paste by length (0.1×/0.3×/1.0×) into purity only; no penalty, `high_paste_volume` flag. |
+| P1-4 First badge unsigned / replay click | Fixed. |
+| P1-5 Ledger not verifiable | Open. |
+| P1-6 verify.html unescaped | Fixed. |
+| P1-7 Signature skips nested fields | Fixed (canonical JSON, unit-tested, server parity-tested). |
+| P1-8 Identity unstable | Replaced by device identity (no login). |
+| P1-9 Badges with no evidence | Fixed: 20 typed characters minimum (client and server); sessions counted on STOP. |
+| P1-10 Passport lost across tabs | Open (the local passport is display-only now; the server profile is the record). |
+| P1-11 Iframe editors not captured | Open. |
+| P1-12 verifier.html mis-renders | Fixed by removal. |
+| P1-13 Profile aggregation races | Fixed: one SQL statement (`record_attestation_stats`). |
+| P1-14 `/verify` stored XSS | Fixed. |
+| P1-15 Lab claims circular | Partly: the lab now scores with the shipping engine; the evaluation design is unchanged. |
+| P1-16 Dwell floor bypass | Open. |
+| P1-17 Loki gate refuses humans | Open (needs real data). |
+| P1-18 WGH capture path weakest | Partly: dwell measured per key (rollover fix); bigram/per-key data still missing on that path. |
+| P1-19 Engine forked | Fixed: `extension/src/war-score.js` is the one engine; SDK bundle and lab load it. |
+| P1-20 Tests protect nothing | Fixed: `npm test` runs unit, backend and 43 Playwright tests and fails on failure; `bot-battery` deterministic. No CI yet. |
+| P1-21 Android badge unsigned | Open (see TRUST_LAYER.md "Next"). |
+| SDK-b / SDK-c / SDK-e..h | SDK-b, e, f, g, h fixed; SDK-c (mobile/IME on the WGH path) open. |
+| P2 locale, held key, first-badge, badge id, BE-6 enumeration | Fixed. |
 
 ---
 

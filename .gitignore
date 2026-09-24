@@ -27,3 +27,7 @@ android/app/build/
 # Secrets
 .env
 .env.local
+
+# Test output
+test-results/
+playwright-report/
