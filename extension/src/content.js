@@ -350,17 +350,24 @@ async function showCertificate(b) {
         m.querySelector('.jitter-close').addEventListener('click', () => { m.style.display = 'none'; });
     } catch (e) {}
 }
-async function copyBadge(s, a) {
+const MIN_KEYS_FOR_BADGE = 20; // same floor the attestation server applies
+
+async function copyBadge(s, isSessionEnd) {
     const loki = JitterBio.analyzeLoki(bioSession);
     if (loki.isBot) {
         alert("Verification Denied: Synthetic Behavior");
         return;
     }
+    // A badge with nothing behind it proves nothing.
+    if (s.typed < MIN_KEYS_FOR_BADGE) {
+        alert(`Type at least ${MIN_KEYS_FOR_BADGE} characters before minting a badge (${s.typed} so far).`);
+        return;
+    }
 
     const profile = JitterBio.getProfile(bioSession);
 
-    // Increment sessions and update passport
-    passport.sessionsCompleted++;
+    // A session is completed when it is stopped, not on every mint
+    if (isSessionEnd) passport.sessionsCompleted++;
     passport.lastUsed = Date.now();
     saveData();
 
