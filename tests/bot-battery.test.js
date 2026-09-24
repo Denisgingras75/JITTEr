@@ -1,6 +1,8 @@
 // tests/bot-battery.test.js
 // "Send playwright bots to fuck around" — multiple bot attack vectors vs JitterBox.scoreRaw
-// Each bot simulates a different evasion strategy. All should score WAR < 0.30.
+// in the built SDK bundle. Each bot simulates a different evasion strategy.
+// Deterministic: every random draw comes from a seeded PRNG, so a failure is a
+// real regression and not an unlucky sample.
 
 var fs = require('fs')
 var path = require('path')
@@ -16,7 +18,10 @@ function assert(condition, msg) {
 
 // Load bundle
 var bundlePath = path.join(__dirname, '..', 'sdk', 'dist', 'jitter.min.js')
-if (!fs.existsSync(bundlePath)) { console.log('SKIP: build first'); process.exit(0) }
+if (!fs.existsSync(bundlePath)) {
+  console.error('FAIL: sdk/dist/jitter.min.js not found — run `node sdk/build.js` first')
+  process.exit(1)
+}
 
 var code = fs.readFileSync(bundlePath, 'utf8')
 var sandbox = {
@@ -43,13 +48,23 @@ vm.runInContext(code, sandbox)
 
 var JitterBox = sandbox.window.JitterBox
 
-// Helper: generate N flight times with given mean and stddev
+// Seeded PRNG (mulberry32)
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0
+    var t = Math.imul(seed ^ seed >>> 15, 1 | seed)
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+var rng = mulberry32(0x5EED)
+
+// Helper: generate N times with given mean and stddev (Box-Muller, seeded)
 function genTimes(n, mean, std) {
   var times = []
   for (var i = 0; i < n; i++) {
-    // Box-Muller for normal distribution
-    var u1 = Math.random() || 0.001
-    var u2 = Math.random()
+    var u1 = rng() || 0.001
+    var u2 = rng()
     var z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
     times.push(Math.max(1, mean + z * std))
   }
@@ -82,6 +97,7 @@ var bot1 = JitterBox.scoreRaw({
 })
 console.log('  WAR:', bot1.war, 'class:', bot1.classification, 'flags:', bot1.flags)
 assert(bot1.war === 0, 'Metronome bot WAR should be 0')
+assert(bot1.classification === 'bot', 'Metronome bot is classified bot')
 
 // --- Bot 2: Fast but with fake jitter (tiny std) ---
 console.log('\n--- Bot 2: Fast + fake jitter (mean=25ms, std=5ms) ---')
@@ -120,39 +136,87 @@ var bot4 = JitterBox.scoreRaw({
   pauseCount: 0,
 })
 console.log('  WAR:', bot4.war, 'class:', bot4.classification, 'flags:', bot4.flags)
-// This is the hardest — timing looks human but no editing behavior
-// Gets flagged 'no_editing_behavior' but timing alone can score well
-// Assert it's flagged, not that it scores lower (RNG variance makes strict compare flaky)
+// This is the hardest — timing looks human but no editing behavior.
 assert(bot4.flags.indexOf('no_editing_behavior') >= 0, 'Replay bot should have no_editing_behavior flag')
-assert(bot4.classification !== 'verified_human', 'Replay bot should not be verified_human, got ' + bot4.classification)
+assert(bot4.classification !== 'verified', 'Replay bot should not be verified, got ' + bot4.classification)
+assert(bot4.war < humanResult.war, 'Replay bot WAR=' + bot4.war + ' should be below the human WAR=' + humanResult.war)
 
-// --- Bot 5: Paste flood — 95% pasted ---
+// --- Bot 5: Paste flood — 95% pasted (one 380-char paste) ---
+// Paste is transparent, not punished (Hard Rule #5): the paste is reported and
+// enters the purity signal at full weight (> 300 chars), nothing else changes.
 console.log('\n--- Bot 5: Paste flood (95% pasted) ---')
+var floodFlights = genTimes(20, 200, 80)
+var floodDwells = genTimes(20, 90, 30)
 var bot5 = JitterBox.scoreRaw({
-  flightTimes: genTimes(20, 200, 80),
-  dwellTimes: genTimes(20, 90, 30),
+  flightTimes: floodFlights,
+  dwellTimes: floodDwells,
   humanChars: 20,
   alienChars: 380,
   backspaceCount: 0,
   pauseCount: 0,
+  pasteCount: 1,
 })
-console.log('  WAR:', bot5.war, 'class:', bot5.classification, 'flags:', bot5.flags)
-assert(bot5.war < 0.10, 'Paste flood WAR=' + bot5.war + ' should be < 0.10')
-assert(bot5.flags.indexOf('paste_flood') >= 0, 'Should have paste_flood flag')
+var bot5Typed = JitterBox.scoreRaw({
+  flightTimes: floodFlights,
+  dwellTimes: floodDwells,
+  humanChars: 20,
+  alienChars: 0,
+  backspaceCount: 0,
+  pauseCount: 0,
+})
+console.log('  WAR:', bot5.war, 'class:', bot5.classification, 'flags:', bot5.flags, 'paste:', JSON.stringify(bot5.paste))
+assert(bot5.paste.count === 1 && bot5.paste.chars === 380 && bot5.paste.weightedChars === 380,
+  'Paste flood is reported: 380 chars at full weight')
+assert(bot5.components.purity < 0.10, 'Paste flood purity component=' + bot5.components.purity + ' should be < 0.10')
+assert(bot5.flags.indexOf('paste_flood') < 0 && bot5.flags.indexOf('paste_heavy') < 0, 'No paste_flood / paste_heavy penalty flags')
+assert(bot5Typed.war - bot5.war >= 0 && bot5Typed.war - bot5.war <= 0.10,
+  'Paste flood changes WAR only through purity: ' + bot5Typed.war + ' -> ' + bot5.war)
 
-// --- Bot 6: Paste heavy — 60% pasted ---
+// --- Bot 6: Paste heavy — 60% pasted (one 60-char paste, 0.3x) ---
 console.log('\n--- Bot 6: Paste heavy (60% pasted) ---')
+var heavyFlights = genTimes(40, 200, 80)
+var heavyDwells = genTimes(40, 90, 30)
 var bot6 = JitterBox.scoreRaw({
-  flightTimes: genTimes(40, 200, 80),
-  dwellTimes: genTimes(40, 90, 30),
+  flightTimes: heavyFlights,
+  dwellTimes: heavyDwells,
   humanChars: 40,
   alienChars: 60,
   backspaceCount: 2,
   pauseCount: 1,
+  pasteCount: 1,
 })
-console.log('  WAR:', bot6.war, 'class:', bot6.classification, 'flags:', bot6.flags)
-assert(bot6.war < humanResult.war * 0.5, 'Paste heavy WAR=' + bot6.war + ' should be < 50% of human')
-assert(bot6.flags.indexOf('paste_heavy') >= 0, 'Should have paste_heavy flag')
+var bot6Typed = JitterBox.scoreRaw({
+  flightTimes: heavyFlights,
+  dwellTimes: heavyDwells,
+  humanChars: 40,
+  alienChars: 0,
+  backspaceCount: 2,
+  pauseCount: 1,
+})
+console.log('  WAR:', bot6.war, 'class:', bot6.classification, 'flags:', bot6.flags, 'paste:', JSON.stringify(bot6.paste))
+assert(bot6.paste.count === 1 && bot6.paste.chars === 60 && bot6.paste.weightedChars === 18,
+  'A 60-char paste is weighted 0.3x (18 weighted chars)')
+assert(bot6Typed.war - bot6.war >= 0 && bot6Typed.war - bot6.war <= 0.03,
+  'A 60-char paste moves WAR by at most 0.03: ' + bot6Typed.war + ' -> ' + bot6.war)
+assert(bot6.flags.indexOf('paste_heavy') < 0, 'No paste_heavy flag')
+
+// --- Paste volume: three pastes are flagged, not penalized ---
+console.log('\n--- Paste volume: three pastes ---')
+var volume = JitterBox.scoreRaw({
+  flightTimes: heavyFlights,
+  dwellTimes: heavyDwells,
+  humanChars: 40,
+  alienChars: 60,
+  backspaceCount: 2,
+  pauseCount: 1,
+  pasteCount: 3,
+  pasteLengths: [20, 20, 20],
+})
+console.log('  WAR:', volume.war, 'flags:', volume.flags, 'paste:', JSON.stringify(volume.paste))
+assert(volume.flags.indexOf('high_paste_volume') >= 0, 'Three pastes set high_paste_volume')
+assert(volume.paste.weightedChars === 6, 'Three 20-char pastes weigh 0.1x each (6 weighted chars)')
+assert(bot6Typed.war - volume.war >= 0 && bot6Typed.war - volume.war <= 0.02,
+  'Three small pastes cost at most 0.02: ' + bot6Typed.war + ' -> ' + volume.war)
 
 // --- Bot 7: Burst bot — alternates fast bursts and pauses ---
 console.log('\n--- Bot 7: Burst bot (fast bursts + long gaps) ---')

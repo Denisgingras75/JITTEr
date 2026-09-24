@@ -1,16 +1,37 @@
 /**
- * Simple build script — concatenates core + init into a single dist file.
- * No webpack, no rollup, no dependencies. Just cat.
+ * Simple build script — concatenates engine + core + badge + init into a
+ * single dist file. No webpack, no rollup, no dependencies. Just cat.
+ *
+ * Order matters: the WAR engine (extension/src/war-score.js, the canonical
+ * scorer shared with the Chrome extension and the lab) goes first so that
+ * `JitterWAR` is in scope for the core.
  */
 
 var fs = require('fs')
 var path = require('path')
 
+var WAR_ENGINE_PATH = path.join(__dirname, '..', 'extension', 'src', 'war-score.js')
+
+var war = fs.readFileSync(WAR_ENGINE_PATH, 'utf8')
 var core = fs.readFileSync(path.join(__dirname, 'src/core/jitter-box.js'), 'utf8')
 var badge = fs.readFileSync(path.join(__dirname, 'src/badge.js'), 'utf8')
 var init = fs.readFileSync(path.join(__dirname, 'src/init.js'), 'utf8')
 
-// Strip module exports/imports from core — we're building a single IIFE
+// Strip the engine's script/CommonJS shims — the bundle exposes JitterWAR itself
+// below and must never touch a host page's `module`.
+var WAR_WINDOW_SHIM = 'if (typeof window !== \'undefined\') {\n  window.JitterWAR = JitterWAR\n}'
+if (war.indexOf(WAR_WINDOW_SHIM) === -1) {
+  throw new Error('build: window shim not found in ' + WAR_ENGINE_PATH + ' (update build.js if it changed)')
+}
+war = war
+  .replace(WAR_WINDOW_SHIM, '')
+  .replace(/^if \(typeof module .+\n.+\n\}/gm, '')
+if (/module\.exports/.test(war)) {
+  throw new Error('build: CommonJS shim still present in ' + WAR_ENGINE_PATH + ' after stripping')
+}
+
+// Strip module exports/imports from core — we're building a single IIFE.
+// (Its `import JitterWAR from ...` line goes too: the engine is inlined above.)
 core = core
   .replace(/^import .+$/gm, '')
   .replace(/^export .+$/gm, '')
@@ -26,6 +47,8 @@ init = init
   .replace(/^if \(typeof module .+\n.+\n\}/gm, '')
 
 var output = ';(function() {\n"use strict";\n\n'
+  + '// ── Jitter WAR engine (extension/src/war-score.js) ──\n'
+  + war + '\n\n'
   + '// ── Jitter Core ─────────────────────────────────────\n'
   // The core and init.js both declare attach(); in one shared scope the later
   // declaration won and JitterBox.attach called itself forever.
@@ -41,6 +64,7 @@ var output = ';(function() {\n"use strict";\n\n'
   + 'if (typeof window !== "undefined") {\n'
   + '  window.Jitter = Jitter;\n'
   + '  window.JitterBox = JitterBox;\n'
+  + '  window.JitterWAR = JitterWAR;\n'
   + '}\n'
   + '})();\n'
 

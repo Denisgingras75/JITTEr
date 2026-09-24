@@ -21,7 +21,7 @@ Captures keystroke timing metadata (never content) and scores human authenticity
 | Component | Status | Description |
 |-----------|--------|-------------|
 | **Chrome Extension** | Working | Manifest V3, modular (6 JS modules), ECDSA badge signing, passport system |
-| **WAR Scorer** | Working | 9-signal weighted composite — bigram rhythm, K-S test, Pearson correlation, entropy |
+| **WAR Scorer** | Working | One shared engine (`extension/src/war-score.js`): 9-signal weighted composite — bigram rhythm, two-sided K-S test, Pearson correlation, hard floors, weighted paste |
 | **Writing Ledger** | Working | Append-only operation timeline with SHA-256 hash-chained checkpoints |
 | **Bot Farm Tests** | Working | 5 Playwright adversarial personas for stress testing |
 | **Embeddable SDK** | Scaffold | `<jitter-input>` widget for any site |
@@ -46,15 +46,17 @@ Captures keystroke timing metadata (never content) and scores human authenticity
 | Editing behavior | 7% | Backspace/delete patterns |
 | Purity score | 5% | Human vs external input ratio |
 
-Canonical implementation: `lab/jitter-box.js` (616 lines)
+Canonical implementation: `extension/src/war-score.js` — one plain-script engine (`JitterWAR`) loaded by the Chrome extension, inlined into the SDK bundle by `node sdk/build.js`, and `require()`d by the lab. Capture code differs per host; the math does not.
+
+Paste is transparent, not punished: pasted characters enter only the purity signal, weighted by the length of each paste (< 50 chars 0.1x, 50–300 0.3x, > 300 1.0x); three or more pastes raise a `high_paste_volume` flag, never a penalty. The time confidence cap (< 1 day 0.35 … 180+ days 1.00) clamps the final WAR, never the raw score.
 
 ---
 
 ## Repo Structure
 
 ```
-extension/     Chrome extension (the product)
-lab/           Algorithm lab (WAR scorer, bot farm, matching engine)
+extension/     Chrome extension (the product) + src/war-score.js, the canonical WAR engine
+lab/           Algorithm lab (bot farm, matching engine; scores with the shared engine)
 sdk/           Embeddable widget scaffold
 android/       Anvil Keyboard (Kotlin IME)
 tests/         10 test files

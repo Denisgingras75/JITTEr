@@ -23,10 +23,10 @@ Behavioral biometrics widget that proves a human typed something. Not AI detecti
 ## Repo Structure
 ```
 extension/        Chrome extension
-  src/            biometrics, content, crypto, passport, writer, auth, popup, verifier
+  src/            war-score (CANONICAL WAR ENGINE), biometrics (capture), content, crypto, passport, writer, auth, popup, verifier
   manifest.json   Manifest V3
 lab/              Algorithm proving ground
-  jitter-box.js   CANONICAL ENGINE (WAR scorer, 9 signals, K-S, Pearson)
+  jitter-box.js   Lab capture harness; scores through extension/src/war-score.js
   algo/           matching engine, runners, generators
   botfarm/        5 Playwright adversarial personas
 sdk/              Embeddable widget (CURRENT BUILD TARGET)
@@ -38,34 +38,40 @@ research/         20+ research docs
 archive/          All previous versions (proof of work)
 ```
 
-## Two Engines
-- `lab/jitter-box.js` = CANONICAL. WAR scorer, 9 signals, K-S test, Pearson. 616 lines. Use this.
-- `extension/src/biometrics.js` = LEGACY. Only 3 simple checks. Being replaced.
+## One Engine, Three Hosts
+- `extension/src/war-score.js` = CANONICAL WAR scorer. Plain script, exposes `JitterWAR`. 9 signals with the plan weights, hard floors, soft penalties, length-weighted paste (no paste penalty), two-sided K-S, Pearson, step-table time cap. Change the math HERE and nowhere else, then `node sdk/build.js`.
+- `extension/src/biometrics.js` = extension CAPTURE (timing, paste lengths, mouse, Loki gate, `getProfile`). `scoreWAR`/`applyTimeCap` delegate to war-score.js. It is not legacy and it is not a scorer.
+- `sdk/src/core/jitter-box.js` = SDK CAPTURE. `sdk/build.js` inlines war-score.js ahead of it into `sdk/dist/jitter.min.js` (committed; rebuild after any engine change).
+- `lab/jitter-box.js` = lab capture harness; `require()`s war-score.js so lab numbers use shipping math.
 
 ## Hard Rules
-1. **Never store raw keystrokes.** Timing metadata only.
+1. **Never store raw keystrokes.** Timing metadata only. (The badge's text_hash is a hash of the whole text, never the text.)
 2. **Never say "AI detector"** — say "human verification" or "proof of human typing process"
 3. **Never claim bulletproof** — claim economically irrational to fake at scale
 4. **Badge must be cryptographically signed** (ECDSA P-256)
 5. **Paste is transparent, not punished** — users paste quotes, URLs, names. Normal.
-6. **jitter-box.js is the canonical engine.** biometrics.js is legacy. Port, don't fork.
+6. **`extension/src/war-score.js` is the canonical engine.** Extension, SDK bundle and lab all load that one file. Change the math there; never copy it.
 7. All IP owned by Denis Gingras. See IP_DECLARATION.md.
 
 ## Known Gaps
-- Extension uses weak biometrics.js (swap in progress on hawk/biometrics-swap branch)
-- Auth has Firebase placeholder keys (Supabase swap on orca/supabase-auth branch)
-- 61% cross-user false match rate (fixed in lab, not ported to extension)
-- verify.html calls badge decode but never calls verifyBadge() (20-line fix)
-- Suspicion score calculated but never embedded in badges
-- Three badge formats exist — unify to v3.0 spec (see MASTER-PLAN.md)
+- WAR thresholds/ramps were tuned on synthetic data; one session separates humans from bots weakly (audit P0-8). Recalibrate on real WGH sessions before trusting a threshold.
+- The SDK's WGH path (`scoreRaw`) has no bigram/per-key data, so 33% of the weight sits at neutral 0.5 (audit P1-18).
+- The server caps and classifies the client's typing score but does not recompute it.
+- Backend changes (migrations 20260924*, attest/verify) are tested locally, not deployed: the Supabase project is paused. Deploy steps in docs/architecture/TRUST_LAYER.md.
+- Anvil (Android) badges are unsigned and unscored; the Android build needs a machine with the SDK.
+- Typing inside iframes isn't captured by the extension; the local passport can lose counts across tabs.
+- Full status per finding: docs/FUNCTIONALITY_AUDIT_2026-09.md "Fix status on this branch".
 
 ## Key Files
 1. `JITTER-PLAN.md` — full build bible (5 components, WAR formula, exit thesis)
 2. `JITTER_FOUNDATIONS.md` — 610-line product bible
-3. `lab/jitter-box.js` — the real engine
+3. `extension/src/war-score.js` — the real engine (one file, loaded by extension, SDK bundle and lab)
 4. `extension/src/content.js` — Chrome content script, protocol v10.0
 5. `docs/security/RED_TEAM.md` — attack surface analysis
 
 ## Backend
-Supabase (consistent with WGH). Firebase auth-utils.js has placeholder keys — do not ship.
+Supabase (consistent with WGH). Firebase auth-utils.js is not loaded anywhere — do not ship.
+Identity is a per-device P-256 key (no login): badges are device-signed, bound to text_hash + url,
+attested by `/attest` (server-side age cap, rate limit, countersignature). Read
+docs/architecture/TRUST_LAYER.md before touching attest/verify, crypto-utils.js or jitter-capture.js.
 Dan IP conversation needed in writing before WGH integration.

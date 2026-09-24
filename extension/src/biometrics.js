@@ -3,10 +3,14 @@
  *
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  *
- * Extracts biometric capture logic into a shared module used by:
+ * Biometric CAPTURE for the Chrome extension (keystroke timing, paste lengths,
+ * mouse path, the Loki flow/gap gate) plus getProfile(). Used by:
  * - content.js (Chrome extension content script)
  * - writer.js (Chrome extension writer)
- * - usePurityTracker.js (WGH React hook)
+ *
+ * The WAR SCORING MATH is not here: scoreWAR() and applyTimeCap() delegate to
+ * src/war-score.js (the canonical engine, shared byte-for-byte with the SDK
+ * bundle and the lab). manifest.json and writer.html load war-score.js first.
  */
 
 // --- CONSTANTS ---
@@ -59,59 +63,7 @@ function calcCV(arr) {
 
 function round2(n) { return Math.round(n * 100) / 100; }
 function round3(n) { return Math.round(n * 1000) / 1000; }
-function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
-
-function rampScore(raw, floor, ceiling) {
-  if (floor < ceiling) return clamp01((raw - floor) / (ceiling - floor));
-  return clamp01((floor - raw) / (floor - ceiling));
-}
-
-// Standard normal CDF (Abramowitz & Stegun)
-function normalCDF(z) {
-  if (z < -6) return 0;
-  if (z > 6) return 1;
-  const sign = z < 0 ? -1 : 1;
-  z = Math.abs(z);
-  const t = 1 / (1 + 0.2316419 * z);
-  const d = 0.3989422804014327 * Math.exp(-z * z / 2);
-  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.8212560 + t * 1.3302744))));
-  return sign === 1 ? 1 - p : p;
-}
-
-// K-S test: compare flight times to log-normal distribution
-function ksStatistic(values) {
-  if (values.length < 10) return 0.5;
-  const logs = values.filter(v => v > 0).map(v => Math.log(v));
-  if (logs.length < 10) return 0.5;
-  const mu = calcMean(logs);
-  const sigma = calcStd(logs);
-  if (sigma === 0) return 1.0;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const n = sorted.length;
-  let maxDiff = 0;
-  for (let j = 0; j < n; j++) {
-    const empirical = (j + 1) / n;
-    const z = (Math.log(sorted[j]) - mu) / sigma;
-    const diff = Math.abs(empirical - normalCDF(z));
-    if (diff > maxDiff) maxDiff = diff;
-  }
-  return round3(maxDiff);
-}
-
-// Pearson correlation
-function pearsonR(a, b) {
-  if (a.length < 3 || a.length !== b.length) return 0;
-  const ma = calcMean(a), mb = calcMean(b);
-  let num = 0, da = 0, db = 0;
-  for (let i = 0; i < a.length; i++) {
-    const ai = a[i] - ma, bi = b[i] - mb;
-    num += ai * bi;
-    da += ai * ai;
-    db += bi * bi;
-  }
-  const denom = Math.sqrt(da * db);
-  return denom > 0 ? num / denom : 0;
-}
+// rampScore, normalCDF, ksStatistic and pearsonR live in war-score.js (JitterWAR).
 
 // --- BIOMETRIC SESSION ---
 function createSession() {
@@ -139,6 +91,7 @@ function createSession() {
     pauseCount: 0,
     pasteCount: 0,
     pastedChars: 0,
+    pasteLengths: [],   // one entry per paste event: its length, never its text
     // Cursor (writer mode only)
     cursorJumps: 0,
     backwardEdits: 0,
@@ -273,10 +226,17 @@ function handleKeyup(session, key, ctrlKey, metaKey, altKey) {
 }
 
 // --- PASTE HANDLER ---
+// Records the LENGTH of each paste, never the text. The engine weights every
+// event by its length (< 50 chars 0.1x, 50-300 0.3x, > 300 1.0x) inside the
+// purity signal: paste is transparent, not punished (Hard Rule #5).
 function handlePaste(session, textLength) {
+  const len = typeof textLength === 'number' && isFinite(textLength) ? Math.round(textLength) : 0;
+  if (len <= 0) return;
   session.pasteCount++;
-  session.pastedChars += textLength;
-  session.alienChars += textLength;
+  session.pastedChars += len;
+  session.alienChars += len;
+  if (!session.pasteLengths) session.pasteLengths = [];
+  session.pasteLengths.push(len);
 }
 
 // --- MOUSE HANDLER ---
@@ -347,242 +307,35 @@ function analyzeLoki(session) {
   };
 }
 
-// --- WAR SCORER (9-signal weighted composite) ---
-const WAR_RAMPS = {
-  bigram_rhythm: [0.08, 0.20],
-  per_key:       [0.09, 0.25],
-  inter_key_var: [9, 45],
-  dwell_std:     [8, 20],
-  mean_dwell:    [27, 80],
-  edit_ratio:    [0.03, 0.08],
-  pause_freq:    [0.4, 1.5],
-  purity:        [0, 1],
-  ks_shape:         [0.25, 0.08],
-  dwell_uniformity: [0.09, 0.25],
-};
-const WAR_WEIGHTS = {
-  bigram_rhythm: 0.18, per_key: 0.15, cross_signal: 0.15, distribution: 0.12,
-  inter_key_var: 0.10, dwell_std: 0.10, mean_dwell: 0.08, editing: 0.05,
-  dwell_uniformity: 0.04, purity: 0.03,
-};
-const WAR_TIERS = [
-  [0.80, 'Hall of Fame'],
-  [0.60, 'All-Star'],
-  [0.40, 'Solid'],
-  [0.20, 'Rookie'],
-  [0,    'Suspicious'],
-];
+// --- WAR SCORER ---
+// The scoring math lives in war-score.js: the canonical engine shared with the
+// SDK bundle and the lab (JITTER-PLAN.md "WAR Formula"). Load src/war-score.js
+// before this file; manifest.json and writer.html both do, Node require()s it.
+const WarEngine = (function resolveWarEngine() {
+  if (typeof JitterWAR !== 'undefined' && JitterWAR) return JitterWAR;
+  if (typeof window !== 'undefined' && window.JitterWAR) return window.JitterWAR;
+  if (typeof require === 'function') return require('./war-score.js');
+  throw new Error('JitterBio: src/war-score.js must be loaded before src/biometrics.js');
+})();
 
 function scoreCrossSignal(session) {
-  let score = 0, tests = 0;
-
-  // Sub-test 1: pause-warmup — after a gap, next keystrokes are slower
-  if (session.flightTimes.length >= 20) {
-    const flights = session.flightTimes;
-    const avgFlight = calcMean(flights);
-    let pauseHits = 0, pauseWarmups = 0;
-    for (let i = 1; i < flights.length - 3; i++) {
-      if (flights[i] > PAUSE_THRESHOLD_MS * 0.5) {
-        pauseHits++;
-        const nextAvg = (flights[i+1] + flights[i+2] + flights[i+3]) / 3;
-        if (nextAvg > avgFlight) pauseWarmups++;
-      }
-    }
-    score += pauseHits >= 1 ? (pauseWarmups / pauseHits > 0.5 ? 1 : 0) : 0.5;
-    tests++;
-  }
-
-  // Sub-test 2: flow coupling — inter-key speed correlates with dwell
-  if (session.flightTimes.length >= 20 && session.dwellTimes.length >= 20) {
-    const flightW = [], dwellW = [];
-    const minLen = Math.min(session.flightTimes.length, session.dwellTimes.length);
-    const ws = 10;
-    for (let k = 0; k + ws <= minLen; k += ws) {
-      flightW.push(calcMean(session.flightTimes.slice(k, k + ws)));
-      dwellW.push(calcMean(session.dwellTimes.slice(k, k + ws)));
-    }
-    if (flightW.length >= 3) {
-      const r = pearsonR(flightW, dwellW);
-      score += r > 0.3 ? 1 : r > 0 ? 0.5 : 0;
-    } else {
-      score += 0.5;
-    }
-    tests++;
-  }
-
-  // Sub-test 3: fatigue slope — typing slows over time
-  if (session.fatigueWindows.length >= 3) {
-    const fw = session.fatigueWindows;
-    score += fw[fw.length - 1] - fw[0] > 0 ? 1 : 0;
-    tests++;
-  }
-
-  return tests > 0 ? round2(score / tests) : 0.5;
+  return WarEngine.scoreCrossSignal(session);
 }
 
+// scoreWAR(session, profile): `session` is createSession() data (timing arrays,
+// character counts, paste lengths), `profile` is getProfile(session).
+// Returns { war, raw_war, tier, classification, components, flags, timeCap, paste }.
+// Fewer than 10 flight times, or no profile, gives war null / 'insufficient_data'.
 function scoreWAR(session, profile) {
-  if (!profile || session.flightTimes.length < 10) {
-    return { war: 0, raw_war: 0, tier: 'Suspicious', components: {}, flags: [] };
-  }
-
-  const flags = [];
-
-  // === LAYER 1: Hard floors — instant WAR = 0 ===
-  const hasHardFloor =
-    (profile.mean_dwell != null && profile.mean_dwell < 27) ||
-    (profile.std_inter_key != null && profile.std_inter_key < 9) ||
-    (profile.mean_inter_key != null && profile.mean_inter_key < 54);
-
-  if (hasHardFloor) {
-    if (profile.mean_dwell < 27) flags.push('dwell_floor');
-    if (profile.std_inter_key < 9) flags.push('variance_floor');
-    if (profile.mean_inter_key < 54) flags.push('iki_floor');
-    return { war: 0, raw_war: 0, tier: 'Suspicious', components: {}, flags };
-  }
-
-  // === LAYER 3: Weighted signals (including new dwell_uniformity) ===
-  const components = {};
-
-  // 1. Bigram rhythm
-  const sigs = profile.bigram_signatures || {};
-  const bigramKeys = Object.keys(sigs);
-  if (bigramKeys.length >= 4) {
-    const bigramMeans = bigramKeys.map(k => sigs[k].mean);
-    const m = calcMean(bigramMeans);
-    const cv = m > 0 ? calcStd(bigramMeans) / m : 0;
-    components.bigram_rhythm = rampScore(cv, WAR_RAMPS.bigram_rhythm[0], WAR_RAMPS.bigram_rhythm[1]);
-    if (cv < 0.08) flags.push('bigram_uniform');
-  } else {
-    components.bigram_rhythm = 0.5;
-  }
-
-  // 2. Per-key uniqueness
-  const pkValues = Object.values(profile.per_key_dwell || {});
-  if (pkValues.length >= 3) {
-    const m = calcMean(pkValues);
-    const cv = m > 0 ? calcStd(pkValues) / m : 0;
-    components.per_key = rampScore(cv, WAR_RAMPS.per_key[0], WAR_RAMPS.per_key[1]);
-    if (cv < 0.09) flags.push('per_key_uniformity');
-  } else {
-    components.per_key = 0.5;
-  }
-
-  // 3. Cross-signal correlation
-  components.cross_signal = scoreCrossSignal(session);
-
-  // 4. Distribution shape (K-S test)
-  if (session.flightTimes.length >= 10) {
-    const ks = ksStatistic(session.flightTimes);
-    components.distribution = rampScore(ks, WAR_RAMPS.ks_shape[0], WAR_RAMPS.ks_shape[1]);
-    if (ks > 0.25) flags.push('non_lognormal');
-  } else {
-    components.distribution = 0.5;
-  }
-
-  // 5. Inter-key variance
-  if (profile.std_inter_key != null) {
-    components.inter_key_var = rampScore(profile.std_inter_key, WAR_RAMPS.inter_key_var[0], WAR_RAMPS.inter_key_var[1]);
-  } else {
-    components.inter_key_var = 0.5;
-  }
-
-  // 6. Dwell std
-  if (profile.std_dwell != null) {
-    components.dwell_std = rampScore(profile.std_dwell, WAR_RAMPS.dwell_std[0], WAR_RAMPS.dwell_std[1]);
-    if (profile.std_dwell < 8) flags.push('dwell_std_hard');
-  } else {
-    components.dwell_std = 0.5;
-  }
-
-  // 7. Mean dwell
-  if (profile.mean_dwell != null) {
-    components.mean_dwell = rampScore(profile.mean_dwell, WAR_RAMPS.mean_dwell[0], WAR_RAMPS.mean_dwell[1]);
-  } else {
-    components.mean_dwell = 0.5;
-  }
-
-  // 8. Editing behavior
-  const editSub = profile.edit_ratio != null
-    ? rampScore(profile.edit_ratio, WAR_RAMPS.edit_ratio[0], WAR_RAMPS.edit_ratio[1]) : 0.5;
-  const pauseSub = profile.pause_freq != null
-    ? rampScore(profile.pause_freq, WAR_RAMPS.pause_freq[0], WAR_RAMPS.pause_freq[1]) : 0.5;
-  components.editing = (editSub + pauseSub) / 2;
-  if (profile.edit_ratio != null && profile.pause_freq != null &&
-      profile.edit_ratio < 0.03 && profile.pause_freq < 0.4) {
-    flags.push('no_editing_behavior');
-  }
-
-  // 9. Dwell uniformity (NEW — 10th signal)
-  if (pkValues.length >= 3) {
-    const m = calcMean(pkValues);
-    const cv = m > 0 ? calcStd(pkValues) / m : 0;
-    components.dwell_uniformity = rampScore(cv, WAR_RAMPS.dwell_uniformity[0], WAR_RAMPS.dwell_uniformity[1]);
-  } else {
-    components.dwell_uniformity = 0.5;
-  }
-
-  // 10. Purity — paste detection
-  const total = session.humanChars + session.alienChars;
-  const pasteRatio = total > 0 ? session.alienChars / total : 0;
-  if (total >= 20) {
-    components.purity = rampScore(session.humanChars / total, WAR_RAMPS.purity[0], WAR_RAMPS.purity[1]);
-    if (pasteRatio > 0.50) flags.push('paste_heavy');
-    if (pasteRatio > 0.90) flags.push('paste_flood');
-  } else {
-    components.purity = 0.5;
-  }
-
-  // Weighted sum
-  let raw_war = 0;
-  for (const [key, weight] of Object.entries(WAR_WEIGHTS)) {
-    raw_war += weight * (components[key] != null ? components[key] : 0.5);
-  }
-  raw_war = round2(raw_war);
-
-  // === LAYER 2: Soft penalties ===
-  const PENALTIES = {
-    bigram_uniform: 0.08,
-    per_key_uniformity: 0.08,
-    dwell_std_hard: 0.06,
-    paste_heavy: 0.15,
-    no_editing_behavior: 0.05,
-    non_lognormal: 0.05,
-    paste_flood: 0.30,
-  };
-
-  let penalty = 0;
-  for (const flag of flags) {
-    if (PENALTIES[flag]) penalty += PENALTIES[flag];
-  }
-
-  let war = round2(Math.max(0, raw_war - penalty));
-
-  // Purity multiplier — paste ratio directly scales WAR down
-  if (total > 0 && pasteRatio > 0.10) {
-    var purityMult = Math.max(0, 1 - pasteRatio);
-    war = round2(war * purityMult);
-  }
-
-  const tier = WAR_TIERS.find(([min]) => war >= min)[1];
-
-  return { war, raw_war, tier, components, flags, timeCap: 1.0 };
+  return WarEngine.scoreProfile(profile, session || {});
 }
 
-// Time confidence cap — the economic thesis in code
-// Day 0 = max 0.35, scales logarithmically to 1.0 at 180+ days
-// Caps `war` (after penalties); `raw_war` stays as the pre-penalty score.
+// Time confidence cap — the economic thesis in code. Step table by account age
+// (< 1 day 0.35, 1-7 0.50, 7-30 0.65, 30-90 0.80, 90-180 0.92, 180+ 1.00).
+// Caps `war` (after penalties); `raw_war` stays the pre-penalty score.
+// Never throws on a missing or NaN firstSeen (both count as day 0).
 function applyTimeCap(warResult, firstSeenMs) {
-  if (!firstSeenMs) {
-    warResult.war = Math.min(warResult.war, 0.35);
-    warResult.timeCap = 0.35;
-    return warResult;
-  }
-  const days = Math.max(0, (Date.now() - firstSeenMs) / 86400000);
-  const cap = Math.min(1.0, round2(0.35 + 0.65 * Math.log(1 + days / 30) / Math.log(7)));
-  warResult.war = round2(Math.min(warResult.war, cap));
-  warResult.timeCap = cap;
-  warResult.tier = WAR_TIERS.find(([min]) => warResult.war >= min)[1];
-  return warResult;
+  return WarEngine.applyTimeCap(warResult, firstSeenMs);
 }
 
 // --- FULL BIOMETRIC PROFILE ---
@@ -715,9 +468,13 @@ const _exports = {
   createSession, handleKeydown, handleKeyup, handlePaste,
   handleMouseMove, handleCursorMove, analyzeLoki, getProfile,
   getPurity, scoreWAR, applyTimeCap, scoreCrossSignal,
-  ksStatistic, pearsonR,
+  // Engine tables and helpers, re-exported from war-score.js (not copies)
+  ksStatistic: WarEngine.ksStatistic, pearsonR: WarEngine.pearsonR,
+  weightedPaste: WarEngine.weightedPaste,
+  WAR_TIERS: WarEngine.WAR_TIERS, WAR_WEIGHTS: WarEngine.WAR_WEIGHTS, WAR_RAMPS: WarEngine.WAR_RAMPS,
+  HARD_FLOORS: WarEngine.HARD_FLOORS, PENALTIES: WarEngine.PENALTIES,
+  WAR: WarEngine,
   EDITING_KEYS, TRACKED_KEYS, TRACKED_BIGRAMS,
-  WAR_TIERS, WAR_WEIGHTS, WAR_RAMPS,
   calcMean, calcStd, calcCV, round2, round3,
 };
 
