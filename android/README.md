@@ -35,7 +35,7 @@ Anvil Keyboard tracks your authentic typing to prove content was written by a hu
 ### Option 1: Android Studio (Recommended)
 
 1. Install [Android Studio](https://developer.android.com/studio)
-2. Open Android Studio → File → Open → Select the `AnvilKeyboard` folder
+2. Open Android Studio → File → Open → Select the `android` folder
 3. Wait for Gradle sync to complete
 4. Click Run (green play button) or Build → Build APK
 5. APK will be at `app/build/outputs/apk/debug/app-debug.apk`
@@ -46,7 +46,7 @@ Anvil Keyboard tracks your authentic typing to prove content was written by a hu
 # Make sure you have Android SDK installed
 # Set ANDROID_HOME environment variable
 
-cd AnvilKeyboard
+cd android
 ./gradlew assembleDebug
 
 # APK location:
