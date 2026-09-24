@@ -44,6 +44,34 @@ Evidence: **VERIFIED** = observed by running it (real MV3 extension in Chromium 
 
 ---
 
+## Fix status on this branch
+
+Fixed and verified (commits `7e99607`, `5d7cd77`, `90231bf`, and the backend commit that follows):
+
+| Finding | Status |
+|---|---|
+| P0-1 Writer/Verify pages can't run | Fixed. Both load in a real MV3 extension; 31/31 E2E pass. |
+| P0-3 Page script can pass as a human | Fixed in the extension and the SDK: untrusted events, auto-repeat and scripted clicks are ignored. |
+| P0-4 Crafted badge link runs script | Fixed. All badge fields are escaped; the certificate checks the signature first and shows VALID / INVALID / UNSIGNED. |
+| P0-5 Direct writes with the anon key | Fixed (migration, not yet deployed). `/attest` still trusts the client: needs the identity decision. |
+| P0-6 No recipient can verify | Partly. `verify_jwt = false` for `/verify` (not yet deployed). The `*.supabase.co` text/plain rewrite still needs a custom domain or static host. `attest` still needs an auth model. |
+| P0-7 SDK `attach` recursion | Fixed. Browser smoke test added. |
+| P1-1 Badge WAR drops penalties | Fixed. |
+| P1-4 First badge unsigned / replay first click | Fixed (extension and content script). |
+| P1-6 verify.html renders unescaped HTML | Fixed. |
+| P1-7 Signature skips nested fields | Fixed: canonical serialization, unit-tested. |
+| P1-14 `/verify` stored HTML injection | Fixed. |
+| P1-20 Tests don't protect anything | Partly: `npm test` runs the unit tests and 38 Playwright tests and fails when they fail. Still no CI; `bot-battery` still flaky. |
+| SDK-b `res.ok` / meta keys | Not yet. |
+| SDK-e `<head>` init, SDK-f marker, SDK-g double backspace / reset | Fixed. |
+| P2 non-Latin-1 locales can't mint, held key flips to SYNTHETIC | Fixed. |
+| P3 near-constant badge ID | Fixed (hash of the payload). |
+| BE-6 anon can list everything | Fixed by the same migration. |
+
+Everything else in the report is still open. See the summary at the end of the conversation for the decisions the remaining P0s depend on.
+
+---
+
 ## Live deployment status (LIVE)
 
 | Item | State |
