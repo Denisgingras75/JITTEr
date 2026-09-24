@@ -68,7 +68,10 @@ document.addEventListener('input', (e) => {
 }, true);
 
 // --- KEYSTROKE DYNAMICS ---
+// Only real input counts: page scripts can dispatch synthetic key events
+// (isTrusted=false), and auto-repeat from a held key is not a keystroke.
 window.addEventListener('keydown', (e) => {
+    if (!e.isTrusted || e.repeat || typeof e.key !== 'string') return;
     if (e.key === 'Backspace' || e.key === 'Delete') {
         JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
         if (project.isActive) updateUI();
@@ -90,10 +93,12 @@ window.addEventListener('keydown', (e) => {
 }, true);
 
 window.addEventListener('keyup', (e) => {
+    if (!e.isTrusted || typeof e.key !== 'string') return;
     JitterBio.handleKeyup(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
 }, true);
 
 document.addEventListener('mousemove', (e) => {
+    if (!e.isTrusted) return;
     JitterBio.handleMouseMove(bioSession, e.clientX, e.clientY);
 });
 
@@ -109,6 +114,7 @@ function updatePassportLevel() {
 
 // --- UTILS ---
 window.addEventListener('paste', (e) => {
+    if (!e.isTrusted) return;
     const pastedText = e.clipboardData?.getData('text') || '';
     if (pastedText.length > 0) {
         // Always track paste in bio session (WAR purity signal)
@@ -231,25 +237,70 @@ function bindButtons(s) {
     };
     ['btn-start', 'btn-stop', 'btn-copy', 'btn-close-menu', 'btn-open-writer'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.onclick = handlers[id];
+        // The buttons live in the page's DOM, so page script can call
+        // element.click() on them. Those clicks are not trusted; ignore them.
+        if (el) el.onclick = (e) => { if (e.isTrusted) handlers[id](); };
     });
 }
 function setupUI(){if(document.getElementById('jitter-shield'))return;const s=document.createElement('div');s.id='jitter-shield';s.className='jitter-passive';s.innerHTML='⚡';const m=document.createElement('div');m.id='jitter-menu';m.style.display='none';document.body.append(s,m);const st=document.createElement('style');st.textContent=`#jitter-shield{position:fixed;bottom:20px;right:20px;background:#000;color:#444;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:2147483647;box-shadow:0 0 10px rgba(0,0,0,0.5);border:2px solid #333;transition:all 0.2s ease;user-select:none}#jitter-shield:hover{transform:scale(1.1);color:#fff;border-color:#fff;box-shadow:0 0 20px #ffffff66}#jitter-shield.jitter-active{border-color:#00F0FF!important;color:#00F0FF!important;box-shadow:0 0 15px #00F0FF66!important}#jitter-menu{position:fixed;bottom:75px;right:20px;background:#050505;color:#fff;border-radius:4px;font-family:'Courier New',monospace;z-index:2147483647;box-shadow:0 0 30px rgba(0,0,0,0.8);border:1px solid #333;width:240px;overflow:hidden}.jitter-header{padding:15px;background:#111;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between}.jitter-body{padding:15px}.jitter-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#aaa}.jitter-val{color:#fff;font-weight:600}.jitter-btn{background:#111;color:#fff;text-align:center;padding:12px;border-radius:2px;cursor:pointer;margin-top:12px;font-weight:600;font-size:12px;transition:all 0.1s ease;border:1px solid #333;letter-spacing:1px;user-select:none}.jitter-btn:hover{background:#222;border-color:#fff;color:#fff;box-shadow:0 0 10px rgba(255,255,255,0.2)}.jitter-btn.primary{background:#00F0FF11;color:#00F0FF;border-color:#00F0FF44}#btn-open-writer{margin-top:15px;border:1px solid #666;color:#ccc;background:#1a1a1a;box-shadow:0 0 5px rgba(0,0,0,0.5)}#btn-open-writer:hover{border-color:#00F0FF;color:#00F0FF;background:#00F0FF11;box-shadow:0 0 15px #00F0FF66;text-shadow:0 0 5px #00F0FF}`;document.head.appendChild(st);s.addEventListener('click',()=>{const x=document.getElementById('jitter-menu');x.style.display=(x.style.display==='none')?'block':'none';updateUI()})}
+// Badge payloads arrive from untrusted links and pasted text: escape every
+// string before it goes anywhere near innerHTML.
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeDeep(v) {
+    if (typeof v === 'string') return escapeHtml(v);
+    if (Array.isArray(v)) return v.map(escapeDeep);
+    if (v && typeof v === 'object') {
+        const out = {};
+        for (const k of Object.keys(v)) out[k] = escapeDeep(v[k]);
+        return out;
+    }
+    return v;
+}
 document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(VERIFY_URL)){return}if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
 function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clearTimeout(scannerTimer);scannerTimer=setTimeout(scanLinks,500)}).observe(document.body,{childList:true,subtree:true})}
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
-function showMiniHUD(b,x,y){try{const d=JSON.parse(atob(b));hideMiniHUD();const h=document.createElement('div');h.id='jitter-hud';h.style.cssText=`position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y+20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;const warLine=d.war!=null?`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">WAR: ${d.war} (${d.war_tier||'—'})</div>`:`<div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;h.innerHTML=`<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${warLine}`;document.body.appendChild(h)}catch(e){}}
-function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
-function showCertificate(b) {
+function showMiniHUD(b, x, y) {
     try {
-        const d = JSON.parse(atob(b));
+        const d = escapeDeep(JSON.parse(atob(b)));
+        hideMiniHUD();
+        const h = document.createElement('div');
+        h.id = 'jitter-hud';
+        h.style.cssText = `position:fixed;z-index:2147483647;background:#050505;border:1px solid #00F0FF;padding:10px;top:${y + 20}px;left:${x}px;color:#fff;font-family:monospace;border-radius:4px;box-shadow:0 0 20px #00F0FF44`;
+        const warLine = d.war != null
+            ? `<div style="margin-top:5px;font-weight:bold;color:#00F0FF">WAR: ${d.war} (${d.war_tier || '—'})</div>`
+            : `<div style="margin-top:5px;font-weight:bold;color:#00F0FF">INT: ${d.integrity}%</div>`;
+        h.innerHTML = `<div>⚡ JITTER</div><div style="font-size:10px;color:#aaa">${d.date}</div>${warLine}<div style="font-size:10px;color:#666;margin-top:4px">click to check signature</div>`;
+        document.body.appendChild(h);
+    } catch (e) {}
+}
+function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
+async function showCertificate(b) {
+    try {
+        const raw = JSON.parse(atob(b));
         const m = document.getElementById('jitter-menu');
         m.style.display = 'block';
 
+        // Check the signature before showing anything as verified. This proves
+        // the badge wasn't altered after signing; it does not yet prove who
+        // signed it (the badge carries its own public key).
+        let sig = { label: 'UNSIGNED', color: '#FFD700', note: 'no cryptographic proof' };
+        if (raw.signature && raw.publicKeyJwk && typeof CryptoUtils !== 'undefined') {
+            const { signature, ...payload } = raw;
+            let ok = false;
+            try { ok = await CryptoUtils.verifyBadge(payload, signature, raw.publicKeyJwk); } catch (e) {}
+            sig = ok
+                ? { label: 'SIGNATURE VALID', color: '#00F0FF', note: 'not altered since signing' }
+                : { label: 'SIGNATURE INVALID', color: '#FF0055', note: 'badge may be forged' };
+        }
+
+        const d = escapeDeep(raw);
+
         // Format passport display
         let passportDisplay = '—';
-        if (d.passport) {
-            const k = d.passport;
+        if (typeof raw.passport === 'number') {
+            const k = raw.passport;
             if (k >= 1000000) {
                 passportDisplay = (k / 1000000).toFixed(1) + 'M';
             } else if (k >= 1000) {
@@ -261,13 +312,15 @@ function showCertificate(b) {
 
         // Build certificate with passport info
         m.innerHTML = `
-            <div class="jitter-header" style="background:#00F0FF11;border-color:#00F0FF">
-                <span class="jitter-title" style="color:#00F0FF">CERTIFICATE</span>
-                <span class="jitter-close" onclick="document.getElementById('jitter-menu').style.display='none'">×</span>
+            <div class="jitter-header" style="background:${sig.color}11;border-color:${sig.color}">
+                <span class="jitter-title" style="color:${sig.color}">CERTIFICATE</span>
+                <span class="jitter-close">×</span>
             </div>
             <div class="jitter-body" style="text-align:center">
                 <div style="font-size:40px;margin-bottom:10px">⚡</div>
-                <div style="font-weight:bold;color:#fff">${d.title || 'Verified'}</div>
+                <div style="font-weight:bold;color:${sig.color}">${sig.label}</div>
+                <div style="font-size:11px;color:#888;margin-bottom:10px">${sig.note}</div>
+                <div style="font-weight:bold;color:#fff">${d.title || 'Badge'}</div>
                 <div style="font-size:12px;color:#888;margin-bottom:15px">${d.date}</div>
 
                 <div style="font-size:11px;color:#666;text-transform:uppercase;margin-bottom:8px;letter-spacing:1px;">Session Metrics</div>
@@ -285,6 +338,7 @@ function showCertificate(b) {
                 ` : ''}
             </div>
         `;
+        m.querySelector('.jitter-close').addEventListener('click', () => { m.style.display = 'none'; });
     } catch (e) {}
 }
 async function copyBadge(s, a) {
@@ -343,7 +397,7 @@ async function copyBadge(s, a) {
         keys: s.typed,
         pastedChars: pastedChars,
         pastes: s.pastes,
-        date: new Date().toLocaleDateString(),
+        date: new Date().toISOString().slice(0, 10),
         edits: bioSession.backspaceCount,
         cr: loki.cognitiveRatio.toFixed(2),
         entropy: loki.entropy,
@@ -382,7 +436,8 @@ async function copyBadge(s, a) {
     }
 
     const b = btoa(JSON.stringify(p));
-    const id = b.slice(-6).toUpperCase();
+    const badgeHash = typeof CryptoUtils !== 'undefined' ? await CryptoUtils.hashBadge(b) : null;
+    const id = (badgeHash || b).slice(0, 6).toUpperCase();
 
     // Store badge hash for chain
     if (typeof CryptoUtils !== 'undefined') {

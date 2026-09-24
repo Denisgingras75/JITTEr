@@ -294,7 +294,7 @@ async function exportBadge() {
 
     const editor = document.getElementById('editor');
     const textLength = editor.innerText.length;
-    const date = new Date().toLocaleDateString();
+    const date = new Date().toISOString().slice(0, 10);
 
     const sessionTotal = session.humanChars + session.alienChars;
     const purity = sessionTotal > 0 ? Math.round((session.humanChars / sessionTotal) * 100) : 100;
@@ -400,7 +400,8 @@ async function exportBadge() {
     chrome.storage.local.set({ passport: passport });
 
     const base64 = btoa(JSON.stringify(payload));
-    const blockID = base64.slice(-6).toUpperCase();
+    const badgeHash = typeof CryptoUtils !== 'undefined' ? await CryptoUtils.hashBadge(base64) : null;
+    const blockID = (badgeHash || base64).slice(0, 6).toUpperCase();
 
     // Store badge hash for next badge's chain
     if (typeof CryptoUtils !== 'undefined') {

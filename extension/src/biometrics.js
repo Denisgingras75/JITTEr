@@ -570,15 +570,16 @@ function scoreWAR(session, profile) {
 
 // Time confidence cap — the economic thesis in code
 // Day 0 = max 0.35, scales logarithmically to 1.0 at 180+ days
+// Caps `war` (after penalties); `raw_war` stays as the pre-penalty score.
 function applyTimeCap(warResult, firstSeenMs) {
   if (!firstSeenMs) {
-    warResult.war = Math.min(warResult.raw_war, 0.35);
+    warResult.war = Math.min(warResult.war, 0.35);
     warResult.timeCap = 0.35;
     return warResult;
   }
   const days = Math.max(0, (Date.now() - firstSeenMs) / 86400000);
   const cap = Math.min(1.0, round2(0.35 + 0.65 * Math.log(1 + days / 30) / Math.log(7)));
-  warResult.war = round2(Math.min(warResult.raw_war, cap));
+  warResult.war = round2(Math.min(warResult.war, cap));
   warResult.timeCap = cap;
   warResult.tier = WAR_TIERS.find(([min]) => warResult.war >= min)[1];
   return warResult;

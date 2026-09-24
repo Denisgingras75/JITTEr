@@ -7,7 +7,7 @@
   },
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node tests/war-scorer.test.js && node tests/wgh-widget.test.js && node tests/sdk.test.js && node tests/bot-battery.test.js && node tests/ideas-audit.test.js",
+    "test:unit": "node tests/war-scorer.test.js && node tests/crypto-utils.test.js && node tests/wgh-widget.test.js && node tests/sdk.test.js && node tests/bot-battery.test.js && node tests/ideas-audit.test.js",
     "test:e2e": "playwright test",
     "test:student": "playwright test tests/student-essay.spec.js",
     "test:teacher": "playwright test tests/teacher-verify.spec.js",

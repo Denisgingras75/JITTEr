@@ -139,4 +139,15 @@ assert(ikResult.war === 0, `IKI floor bot WAR=${ikResult.war} should be 0`);
 const wSum = Object.values(bio.WAR_WEIGHTS).reduce((a, b) => a + b, 0);
 assert(Math.abs(wSum - 1.0) < 0.001, `Weights sum=${wSum} should be 1.0`);
 
+// Test 9: The time cap can lower a score but never lift penalties off it
+const penalized = bio.scoreWAR(humanSession(), sophisticatedBotProfile());
+assert(penalized.war < penalized.raw_war, `Penalized WAR=${penalized.war} should be below raw_war=${penalized.raw_war}`);
+const oldAccount = bio.applyTimeCap({ ...penalized }, Date.now() - 400 * 86400000);
+assert(oldAccount.war <= penalized.war, `Capped WAR=${oldAccount.war} (old account) should not exceed penalized WAR=${penalized.war}`);
+const newAccount = bio.applyTimeCap({ ...penalized }, null);
+assert(newAccount.war <= Math.min(penalized.war, 0.35), `Capped WAR=${newAccount.war} (day 0) should be <= min(penalized, 0.35)`);
+const cleanHuman = bio.scoreWAR(humanSession(), humanProfile());
+const cappedHuman = bio.applyTimeCap({ ...cleanHuman }, null);
+assert(cappedHuman.war === Math.min(cleanHuman.war, 0.35), `Day-0 cap should apply to a clean human: ${cappedHuman.war}`);
+
 console.log('\nDone.');

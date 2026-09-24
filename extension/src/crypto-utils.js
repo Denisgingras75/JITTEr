@@ -91,14 +91,27 @@ const CryptoUtils = {
         }
     },
 
+    // Canonical JSON: keys sorted at every depth, no whitespace, undefined
+    // dropped. Signing this means every nested field is covered by the
+    // signature. (JSON.stringify with a key array only whitelists names, so
+    // nested objects were signed as {} before.)
+    canonicalJson(value) {
+        if (value === undefined) return 'null';
+        if (value === null || typeof value !== 'object') return JSON.stringify(value);
+        if (Array.isArray(value)) return '[' + value.map(v => this.canonicalJson(v)).join(',') + ']';
+        return '{' + Object.keys(value).sort()
+            .filter(k => value[k] !== undefined)
+            .map(k => JSON.stringify(k) + ':' + this.canonicalJson(value[k]))
+            .join(',') + '}';
+    },
+
     // Sign badge data
     async signBadge(badgeData) {
         try {
             const keyPair = await this.getOrCreateKeyPair();
             if (!keyPair) return null;
 
-            // Create canonical string from badge data
-            const dataString = JSON.stringify(badgeData, Object.keys(badgeData).sort());
+            const dataString = CryptoUtils.canonicalJson(badgeData);
             const encoder = new TextEncoder();
             const data = encoder.encode(dataString);
 
@@ -136,7 +149,7 @@ const CryptoUtils = {
             );
 
             // Reconstruct signed data
-            const dataString = JSON.stringify(badgeData, Object.keys(badgeData).sort());
+            const dataString = CryptoUtils.canonicalJson(badgeData);
             const encoder = new TextEncoder();
             const data = encoder.encode(dataString);
 

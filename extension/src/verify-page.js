@@ -7,6 +7,22 @@
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  */
 
+// Badge payloads arrive from untrusted links and pasted text: escape every
+// string before it goes anywhere near innerHTML.
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeDeep(v) {
+    if (typeof v === 'string') return escapeHtml(v);
+    if (Array.isArray(v)) return v.map(escapeDeep);
+    if (v && typeof v === 'object') {
+        const out = {};
+        for (const k of Object.keys(v)) out[k] = escapeDeep(v[k]);
+        return out;
+    }
+    return v;
+}
+
 function extractBadgeData(input) {
     input = input.trim();
 
@@ -59,25 +75,28 @@ async function verifyBadge() {
     try {
         const base64 = extractBadgeData(input);
         const jsonString = atob(base64);
-        const data = JSON.parse(jsonString);
+        const raw = JSON.parse(jsonString);
 
         // --- CRYPTOGRAPHIC VERIFICATION ---
         // The signature was computed over the payload WITHOUT the signature field.
         // Strip signature to reconstruct what was originally signed.
         let cryptoStatus = 'unsigned'; // 'unsigned' | 'valid' | 'invalid'
-        if (data.signature && data.publicKeyJwk) {
-            const { signature, ...payloadWithoutSignature } = data;
+        if (raw.signature && raw.publicKeyJwk) {
+            const { signature, ...payloadWithoutSignature } = raw;
             try {
                 const isValid = await CryptoUtils.verifyBadge(
                     payloadWithoutSignature,
                     signature,
-                    data.publicKeyJwk
+                    raw.publicKeyJwk
                 );
                 cryptoStatus = isValid ? 'valid' : 'invalid';
             } catch (e) {
                 cryptoStatus = 'invalid';
             }
         }
+
+        // Everything below is rendered with innerHTML: escape all strings first.
+        const data = escapeDeep(raw);
 
         const suspicionScore = data.suspicionScore || 0;
         const riskClass = getRiskClass(suspicionScore);
@@ -111,7 +130,7 @@ async function verifyBadge() {
                             ${data.war}
                         </div>
                         <div class="metric-status" style="color: ${data.war >= 0.60 ? '#00F0FF' : data.war >= 0.40 ? '#FFD700' : '#FF0055'}">
-                            ${data.war_tier || 'Unknown'}${data.raw_war != null && data.raw_war !== data.war ? ' (capped from ' + data.raw_war + ')' : ''}
+                            ${data.war_tier || 'Unknown'}${data.raw_war != null && data.raw_war !== data.war ? ' (raw score ' + data.raw_war + ')' : ''}
                         </div>
                     </div>
 
@@ -367,7 +386,7 @@ async function verifyBadge() {
             <div class="error-box">
                 <h3 style="margin-top:0;">❌ Invalid Badge</h3>
                 <p>Could not decode badge data. Please check the input and try again.</p>
-                <p style="font-size:12px; margin-top:10px; color:#888;">Error: ${error.message}</p>
+                <p style="font-size:12px; margin-top:10px; color:#888;">Error: ${escapeHtml(error.message)}</p>
             </div>
         `;
         resultDiv.style.display = 'block';
