@@ -1,14 +1,16 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  ageInDays, canonicalJson, classify, deviceIdFor, isP256PublicJwk, keyIdFromDeviceId,
-  MAX_ATTESTS_PER_HOUR, MAX_BODY_BYTES, MIN_KEYS_FOR_ATTESTATION, sha256Hex, signEcdsa,
-  timeCapForAge, verifyEcdsa,
+  ageInDays, allowedSiteKeys, canonicalJson, checkIpLimit, classify, corsHeaders, deviceIdFor, fail,
+  isP256PublicJwk, json, keyIdFromDeviceId, MAX_ATTESTS_PER_HOUR, MAX_BODY_BYTES, MIN_KEYS_FOR_ATTESTATION,
+  sha256Hex, signEcdsa, timeCapForAge, verifyEcdsa,
 } from '../_shared/trust.ts'
 
 // POST /attest
 //
 // Body: { site_key, badge, signature }
+//   site_key  which integration is calling; must be on the allowlist
+//             (JITTER_SITE_KEYS, default extension, writer, wgh)
 //   badge     the payload the client signed (its own device public key is
 //             badge.publicKeyJwk; the score is badge.war; the certified text
 //             is badge.text_hash; where it was minted is badge.url)
@@ -16,16 +18,8 @@ import {
 //
 // The signature is the caller's credential: no login, no API key. The server
 // registers the device on first sight, applies the time cap from ITS record
-// of the device's age, rate-limits per device, stores the attestation and
-// countersigns it with the server key (if one is configured).
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-const fail = (status: number, error: string, detail?: string) => json(status, detail ? { error, detail } : { error })
+// of the device's age, rate-limits per device and per address, stores the
+// attestation and countersigns it with the server key (if one is configured).
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -40,6 +34,7 @@ serve(async (req) => {
 
   const { site_key, badge, signature } = body ?? {}
   if (typeof site_key !== 'string' || !/^[a-z0-9_-]{1,40}$/i.test(site_key)) return fail(400, 'bad_site_key')
+  if (!allowedSiteKeys().includes(site_key)) return fail(400, 'unknown_site_key')
   if (!badge || typeof badge !== 'object' || typeof signature !== 'string') return fail(400, 'missing_fields', 'badge and signature are required')
   if (!isP256PublicJwk(badge.publicKeyJwk)) return fail(400, 'bad_public_key')
   if ('signature' in badge) return fail(400, 'bad_badge', 'badge must not contain its own signature')
@@ -66,10 +61,16 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
-  // Replay: the same signed badge attested twice is the same attestation.
+  // Everything above cost only CPU; everything below touches the database,
+  // so this is where the address's hourly budget is spent.
+  const limited = await checkIpLimit(supabase, req)
+  if (limited) return limited
+
+  // Replay: the same signed badge attested twice is the same attestation,
+  // reported with the key that countersigned it at the time.
   const { data: existing } = await supabase
     .from('attestations')
-    .select('badge_hash, war_score, classification, time_cap, age_days, created_at, server_signature')
+    .select('badge_hash, war_score, classification, time_cap, age_days, created_at, server_signature, server_key_id')
     .eq('client_sig_hash', clientSigHash)
     .single()
   if (existing) {
@@ -77,7 +78,7 @@ serve(async (req) => {
       badge_hash: existing.badge_hash, device_id: deviceId, war: Number(existing.war_score),
       time_cap: Number(existing.time_cap), age_days: existing.age_days, classification: existing.classification,
       attested_at: existing.created_at, site_key,
-    }, server_signature: existing.server_signature ?? null, server_key_id: await serverKeyId() })
+    }, server_signature: existing.server_signature ?? null, server_key_id: existing.server_key_id ?? await serverKeyId() })
   }
 
   // Register / refresh the device; the server's record of its age is the only one that counts.
@@ -112,6 +113,7 @@ serve(async (req) => {
     attested_at: attestedAt,
   }
   const serverSignature = await countersign(attestation)
+  const serverKey = await serverKeyId()
 
   const { error: insErr } = await supabase.from('attestations').insert({
     user_id: deviceId,
@@ -133,6 +135,7 @@ serve(async (req) => {
     time_cap: cap,
     age_days: ageDays,
     server_signature: serverSignature,
+    server_key_id: serverKey,
     created_at: attestedAt,
   })
   if (insErr) return fail(500, 'insert_failed')
@@ -147,7 +150,7 @@ serve(async (req) => {
     badge_hash: badgeHash,
     attestation,
     server_signature: serverSignature,
-    server_key_id: await serverKeyId(),
+    server_key_id: serverKey,
     profile: profile ? { badges: profile.total_badges, avg_war: Number(profile.avg_war), best_war: Number(profile.best_war), level: profile.level } : null,
   })
 })

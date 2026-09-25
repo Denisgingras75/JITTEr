@@ -391,3 +391,7 @@ verify_jwt = false
 [functions.attest]
 # The device signature inside the body is the credential; there is no login.
 verify_jwt = false
+
+[functions.erase]
+# Same credential as attest: a request signed by the device key.
+verify_jwt = false

@@ -34,7 +34,7 @@ serve(async (req) => {
 
   const { data, error } = await supabase
     .from('attestations')
-    .select('war_score, war_client, classification, flags, site_key, created_at, user_id, device_id, time_cap, age_days, server_signature, text_hash, url')
+    .select('war_score, war_client, classification, flags, site_key, created_at, user_id, device_id, time_cap, age_days, server_signature, server_key_id, text_hash, url')
     .eq('badge_hash', badge_hash.toLowerCase())
     .single()
 
@@ -67,6 +67,7 @@ serve(async (req) => {
         attested_at: data.created_at,
       },
       server_signature: data.server_signature ?? null,
+      server_key_id: data.server_key_id ?? null,
       profile: profile ? {
         badges: profile.total_badges, avg_war: Number(profile.avg_war), best_war: Number(profile.best_war),
         level: profile.level, first_seen: profile.first_seen, sites_used: profile.sites_used || [],
