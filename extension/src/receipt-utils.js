@@ -304,11 +304,13 @@ const JitterReceipt = (function () {
     if (!isFinite(ms)) return '—';
     return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
+  // Never says "100%" when something was pasted, however small the paste:
+  // the share is rounded to two decimals in the receipt, so 3 pasted
+  // characters in 1 000 typed would otherwise round up to 100%.
   function percent(share, pastedChars) {
     const v = num(share);
     if (v == null) return '—';
-    if (v >= 1) return '100%';
-    const p = Math.round(v * 100);
+    const p = Math.round(Math.max(0, Math.min(1, v)) * 100);
     return (count(pastedChars) > 0 ? Math.min(99, p) : p) + '%';
   }
   function distinctDays(sessions) {

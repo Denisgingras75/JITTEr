@@ -1,101 +1,135 @@
-// Test: Writing Ledger and Replay — type, open replay, scrub through checkpoints
+// The writing ledger: operations (never characters) and hash-chained
+// checkpoints over content snapshots, taken at a sitting boundary, after
+// every paste, after 60 s of activity and at minting. The replay panel scrubs
+// through the checkpoints; the ledger file exports as v4 with a chain any
+// verifier can recompute. Contract: docs/product/PROCESS_RECEIPT.md.
 const { test, expect } = require('@playwright/test');
-const { openWriter, humanType, getStats } = require('./helpers');
+const { openWriter, typeText, pasteText, getStats, readReceipt, downloadJson, editorText, sha256Hex } = require('./helpers');
+
+const PASTED = 'Pasted paragraph: recorded by its length, shown in the replay.';
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const OP_FIELDS = { type: ['op', 't', 'n', 'ms'], delete: ['op', 't', 'n'], paste: ['op', 't', 'len'], blur: ['op', 't'], focus: ['op', 't'], session: ['op', 't', 'k'] };
+
+function scrub(page, selector, idx) {
+  return page.locator(selector).fill(String(idx));
+}
 
 test.describe('Writing Ledger & Replay', () => {
-  test('ledger starts with genesis checkpoint', async ({ page }) => {
+  test('ledger starts with one block: the sitting checkpoint', async ({ page }) => {
     await openWriter(page);
 
-    // Should have 1 block (genesis/initial checkpoint)
     const stats = await getStats(page);
     expect(stats.ledgerBlocks).toBe('1 blocks');
+    expect(stats.ledgerHash).toMatch(/^[0-9A-F]{12}$/);
+
+    const file = (await downloadJson(page, '#btn-export-ledger')).json;
+    expect(file.ops).toEqual([expect.objectContaining({ op: 'session', k: 1 })]);
+    expect(file.checkpoints).toHaveLength(1);
+    expect(file.checkpoints[0]).toMatchObject({ i: 0, op_index: 1, content: '' });
+    expect(file.checkpoints[0].hash.slice(0, 12).toUpperCase()).toBe(stats.ledgerHash);
   });
 
-  test('typing creates ledger checkpoints every 10 ops', async ({ page }) => {
+  test('getting a receipt adds a block and moves the chain hash', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
+    await typeText(page, 'Hello world.');
 
-    // Type 25+ characters to get at least 2-3 checkpoints after genesis
-    const text = 'abcdefghijklmnopqrstuvwxyz';
-    await humanType(page, text, { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(500);
+    const before = await getStats(page);
+    const receipt = await readReceipt(page);
+    const after = await getStats(page);
 
-    const stats = await getStats(page);
-    const blocks = parseInt(stats.ledgerBlocks);
-    // genesis + at least 2 typing checkpoints (26 chars / 10 = 2.6)
-    expect(blocks).toBeGreaterThanOrEqual(3);
+    expect(after.ledgerBlocks).toBe('2 blocks');
+    expect(after.ledgerHash).not.toBe(before.ledgerHash);
+    expect(receipt.payload.ledger.checkpoints).toBe(2);
+    expect(receipt.payload.ledger.hash.slice(0, 12).toUpperCase()).toBe(after.ledgerHash);
   });
 
-  test('ledger hash updates with each checkpoint', async ({ page }) => {
+  test('a checkpoint is taken after every paste', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
+    await typeText(page, 'Typed first. ');
 
-    // Get initial hash
-    const stats1 = await getStats(page);
-    const hash1 = stats1.ledgerHash;
+    await pasteText(page, PASTED);
+    await expect(page.locator('#ledger-count')).toHaveText('2 blocks');
 
-    // Type enough for a new checkpoint
-    await humanType(page, 'Hello world.', { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(500);
-
-    const stats2 = await getStats(page);
-    const hash2 = stats2.ledgerHash;
-
-    // Hash should have changed
-    expect(hash2).not.toBe(hash1);
+    await pasteText(page, ' And again.');
+    await expect(page.locator('#ledger-count')).toHaveText('3 blocks');
   });
 
-  test('replay panel opens and shows content', async ({ page }) => {
+  test('a checkpoint is taken after 60 s of activity', async ({ page }) => {
     await openWriter(page);
+    // Sixty seconds of typing do not fit in a test: the time of the last
+    // checkpoint is moved 61 s into the past instead, so the typing run that
+    // ends next is past the limit.
+    await page.evaluate(() => { doc.lastCheckpointAt -= 61000; });
+    await typeText(page, 'Written for a while.');
+    // The run ends 2 s after the last key; the checkpoint follows
+    await expect(page.locator('#ledger-count')).toHaveText('2 blocks', { timeout: 8000 });
+  });
 
-    // Type content
-    await humanType(page, 'This text will appear in the replay panel when we scrub through.', { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(300);
+  test('replay panel opens over the checkpoints', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openWriter(page);
+    await typeText(page, 'This text will appear in the replay panel when we scrub through.');
+    await readReceipt(page); // a second block
 
-    // Open replay
     await page.click('#btn-replay');
     const replayPanel = page.locator('#replay-panel');
     await expect(replayPanel).toBeVisible();
 
-    // Scrubber should have max > 0
-    const scrubberMax = await page.locator('#replay-scrubber').getAttribute('max');
-    expect(parseInt(scrubberMax)).toBeGreaterThan(0);
-
-    // Replay should show time
+    await expect(page.locator('#replay-scrubber')).toHaveAttribute('max', '1');
     await expect(page.locator('#replay-time')).toContainText('T+');
+    await expect(page.locator('#replay-time')).toContainText('block 1/2');
+    await expect(page.locator('#replay-paste-indicator')).toBeHidden();
   });
 
-  test('scrubbing through replay shows document at different points', async ({ page }) => {
+  test('scrubbing shows the document at each block', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
 
-    // Type in two distinct chunks with a pause
-    await humanType(page, 'First chunk. ', { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(500);
-    await humanType(page, 'Second chunk.', { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(500);
+    await typeText(page, 'First chunk. ');
+    await readReceipt(page);
+    await typeText(page, 'Second chunk.');
+    await readReceipt(page);
+    expect((await getStats(page)).ledgerBlocks).toBe('3 blocks');
 
-    // Open replay
     await page.click('#btn-replay');
     await expect(page.locator('#replay-panel')).toBeVisible();
+    const shown = async () => (await page.locator('#replay-editor').innerText()).replace(/ /g, ' ').trim();
 
-    // Get content at beginning (checkpoint 0)
-    const contentAtStart = await page.evaluate(() => {
-      renderReplay(0);
-      return document.getElementById('replay-editor').innerText;
-    });
+    await scrub(page, '#replay-scrubber', 0);
+    expect(await shown()).toBe('');
+    await expect(page.locator('#replay-time')).toContainText('block 1/3');
 
-    // Get content at latest checkpoint
-    const maxIdx = await page.evaluate(() => ledger.checkpoints.length - 1);
-    const contentAtEnd = await page.evaluate((idx) => {
-      renderReplay(idx);
-      return document.getElementById('replay-editor').innerText;
-    }, maxIdx);
+    await scrub(page, '#replay-scrubber', 1);
+    expect(await shown()).toBe('First chunk.');
+    await expect(page.locator('#replay-time')).toContainText('block 2/3');
 
-    // Start should have less content than end
-    expect(contentAtEnd.length).toBeGreaterThan(contentAtStart.length);
+    await scrub(page, '#replay-scrubber', 2);
+    expect(await shown()).toBe('First chunk. Second chunk.');
+    await expect(page.locator('#replay-time')).toContainText('block 3/3');
+  });
+
+  test('the replay marks the block that follows a paste', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openWriter(page);
+    await typeText(page, 'Intro. ');
+    await pasteText(page, PASTED);
+    await expect(page.locator('#ledger-count')).toHaveText('2 blocks');
+
+    await page.click('#btn-replay');
+    await scrub(page, '#replay-scrubber', 1);
+    await expect(page.locator('#replay-paste-indicator')).toBeVisible();
+    await expect(page.locator('#replay-paste-indicator')).toContainText(`PASTE OF ${PASTED.length} CHARACTERS`);
+    expect((await page.locator('#replay-editor').innerText()).replace(/ /g, ' ').trim()).toBe('Intro. ' + PASTED);
+
+    await scrub(page, '#replay-scrubber', 0);
+    await expect(page.locator('#replay-paste-indicator')).toBeHidden();
   });
 
   test('replay close button works', async ({ page }) => {
     await openWriter(page);
-    await humanType(page, 'Quick typing.', { minDelay: 40, maxDelay: 80 });
+    await typeText(page, 'Quick typing.');
 
     await page.click('#btn-replay');
     await expect(page.locator('#replay-panel')).toBeVisible();
@@ -104,29 +138,65 @@ test.describe('Writing Ledger & Replay', () => {
     await expect(page.locator('#replay-panel')).toBeHidden();
   });
 
-  test('ledger export downloads a JSON file', async ({ page }) => {
+  test('ledger export downloads a v4 ledger file whose chain recomputes', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
-    await humanType(page, 'Content for ledger export test.', { minDelay: 40, maxDelay: 80 });
-    await page.waitForTimeout(300);
+    const typed1 = 'Content for the ledger export test. ';
+    await typeText(page, typed1);
+    await pasteText(page, PASTED);
+    await typeText(page, ' The endd');
+    await page.keyboard.press('Backspace');
+    const receipt = await readReceipt(page);
+    const text = await editorText(page);
 
-    // Listen for download
-    const [download] = await Promise.all([
-      page.waitForEvent('download'),
-      page.click('#btn-export-ledger'),
-    ]);
+    const download = await downloadJson(page, '#btn-export-ledger');
+    expect(download.filename).toMatch(/^untitled-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.jitter-ledger\.json$/);
+    const file = download.json;
 
-    expect(download.suggestedFilename()).toMatch(/^jitter-ledger-\d+\.json$/);
+    expect(file.version).toBe('4.0');
+    expect(file.type).toBe('jitter-ledger');
+    expect(file.started_at).toMatch(ISO);
+    expect(file.exported_at).toMatch(ISO);
+    expect(file.started_at).toBe(file.ops[0].t);
 
-    // Read and validate the downloaded file
-    const path = await download.path();
-    const fs = require('fs');
-    const content = JSON.parse(fs.readFileSync(path, 'utf8'));
+    // Operations: counts and timestamps only, never characters
+    expect(file.ops.length).toBeGreaterThan(0);
+    expect(file.ops[0]).toMatchObject({ op: 'session', k: 1 });
+    for (const op of file.ops) {
+      expect(Object.keys(OP_FIELDS)).toContain(op.op);
+      expect(Object.keys(op).sort()).toEqual(OP_FIELDS[op.op].slice().sort());
+      expect(op.t).toMatch(ISO);
+    }
+    const typedOps = file.ops.filter(op => op.op === 'type');
+    expect(typedOps.reduce((sum, op) => sum + op.n, 0)).toBe(typed1.length + ' The endd'.length);
+    expect(typedOps.every(op => op.n >= 1 && op.n <= 50 && op.ms >= 0)).toBe(true);
+    expect(file.ops.filter(op => op.op === 'paste')).toEqual([expect.objectContaining({ len: PASTED.length })]);
+    expect(file.ops.filter(op => op.op === 'delete')).toEqual([expect.objectContaining({ n: 1 })]);
+    expect(JSON.stringify(file.ops)).not.toContain('ledger export');
+    expect(JSON.stringify(file.ops)).not.toContain('Pasted paragraph');
 
-    expect(content.version).toBe('3.0');
-    expect(content.type).toBe('jitter-ledger');
-    expect(content.meta.ledgerHash).toBeTruthy();
-    expect(content.meta.totalOps).toBeGreaterThan(0);
-    expect(content.checkpoints.length).toBeGreaterThan(0);
-    expect(content.ops.length).toBeGreaterThan(0);
+    // Checkpoints: the student's replay, hash-chained
+    expect(file.checkpoints.length).toBeGreaterThanOrEqual(3); // sitting, paste, minting
+    let prev = 'genesis';
+    for (let i = 0; i < file.checkpoints.length; i++) {
+      const cp = file.checkpoints[i];
+      expect(Object.keys(cp).sort()).toEqual(['content', 'content_hash', 'hash', 'i', 'op_index', 't']);
+      expect(cp.i).toBe(i);
+      expect(cp.t).toMatch(ISO);
+      expect(cp.op_index).toBeLessThanOrEqual(file.ops.length);
+      if (i > 0) expect(cp.op_index).toBeGreaterThanOrEqual(file.checkpoints[i - 1].op_index);
+      expect(cp.content_hash).toBe(await sha256Hex(cp.content));
+      expect(cp.hash).toBe(await sha256Hex(`${prev}|${cp.op_index}|${cp.t}|${cp.content_hash}`));
+      prev = cp.hash;
+    }
+    const last = file.checkpoints[file.checkpoints.length - 1];
+    expect(file.final_hash).toBe(last.hash);
+    expect(last.content).toBe(text);
+    expect(last.op_index).toBe(file.ops.length);
+
+    // The receipt was issued on this chain
+    expect(receipt.payload.ledger.hash).toBe(file.final_hash);
+    expect(receipt.payload.ledger.checkpoints).toBe(file.checkpoints.length);
+    expect(receipt.payload.ledger.ops).toBe(file.ops.length);
   });
 });

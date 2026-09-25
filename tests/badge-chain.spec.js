@@ -1,54 +1,64 @@
-// Test: Badge chain integrity — mint two badges, second references first
+// Receipt chain: every receipt a device issues carries the hash of the
+// previous one (previousBadge), null for the first.
 const { test, expect } = require('@playwright/test');
-const { openWriter, humanType, mintBadge, extractBase64FromBadge } = require('./helpers');
+const { createHash } = require('crypto');
+const { openWriter, typeText, readReceipt, newDocument, getStats } = require('./helpers');
 
-test.describe('Badge Chain Integrity', () => {
-  test('first badge has no previous badge hash', async ({ page, context }) => {
+// What the Writer stores after a receipt (CryptoUtils.storeBadgeHash): the
+// first 16 hex characters of sha256 over the base64 payload.
+function receiptHash(base64) {
+  return createHash('sha256').update(base64).digest('hex').slice(0, 16);
+}
+
+test.describe('Receipt Chain', () => {
+  test('the first receipt from a device has no previous receipt', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
+    await typeText(page, 'First document in the chain. No previous receipt exists.');
 
-    await humanType(page, 'First document in the chain. No previous badge exists.', { minDelay: 80, maxDelay: 200 });
-
-    const badge = await mintBadge(page);
-    const base64 = extractBase64FromBadge(badge.html);
-    const payload = JSON.parse(atob(base64));
-
-    // First badge should have no previous badge hash
+    const { payload } = await readReceipt(page);
     expect(payload.previousBadge).toBeNull();
-    // Signature proves crypto is working
     expect(payload.signature).toBeTruthy();
+    expect(payload.publicKeyId).toMatch(/^[0-9A-F]{12}$/);
+    expect((await getStats(page)).passportLine).toMatch(/· 1 receipt$/);
   });
 
-  test('second badge references first badge hash', async ({ page, context }) => {
+  test('the receipt for the next document references the previous receipt', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await openWriter(page);
 
-    // Mint first badge
-    await humanType(page, 'First document. This establishes the start of the chain.', { minDelay: 80, maxDelay: 200 });
-    const badge1 = await mintBadge(page);
-    const base641 = extractBase64FromBadge(badge1.html);
-    const payload1 = JSON.parse(atob(base641));
+    await typeText(page, 'First document. This establishes the start of the chain.');
+    const first = await readReceipt(page);
 
-    // Wait and then reset + type second doc
-    await page.waitForTimeout(500);
-    await page.evaluate(() => {
-      // Simulate new session without full reset (keep passport + crypto)
-      session.humanChars = 0;
-      session.alienChars = 0;
-      bioSession = JitterBio.createSession();
-      document.getElementById('editor').innerHTML = '';
-    });
+    await newDocument(page, true);
+    await typeText(page, 'Second document. This should reference the first receipt.');
+    const second = await readReceipt(page);
 
-    await humanType(page, 'Second document. This should reference the first badge hash.', { minDelay: 80, maxDelay: 200 });
-    const badge2 = await mintBadge(page);
-    const base642 = extractBase64FromBadge(badge2.html);
-    const payload2 = JSON.parse(atob(base642));
+    expect(second.payload.previousBadge).toBe(receiptHash(first.base64));
+    expect(second.payload.previousBadge).toMatch(/^[0-9a-f]{16}$/);
+    // Same device key, different text
+    expect(second.payload.publicKeyId).toBe(first.payload.publicKeyId);
+    expect(second.payload.publicKeyJwk).toEqual(first.payload.publicKeyJwk);
+    expect(second.payload.text_hash).not.toBe(first.payload.text_hash);
+    expect(second.payload.ledger.hash).not.toBe(first.payload.ledger.hash);
+    expect(second.payload.process.sessions).toHaveLength(1);
+    expect((await getStats(page)).passportLine).toMatch(/· 2 receipts$/);
+  });
 
-    // Second badge should reference the first
-    expect(payload2.previousBadge).toBeTruthy();
-    expect(payload2.previousBadge).not.toBeNull();
+  test('a later receipt for the same document, after more writing, chains too', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openWriter(page);
 
-    // Sessions should have incremented
-    expect(payload2.sessions).toBeGreaterThan(payload1.sessions);
+    await typeText(page, 'The draft gets a receipt, ');
+    const first = await readReceipt(page);
+    await typeText(page, 'then more writing, then another receipt.');
+    const second = await readReceipt(page);
+
+    expect(second.payload.previousBadge).toBe(receiptHash(first.base64));
+    expect(second.payload.process.typed_chars).toBeGreaterThan(first.payload.process.typed_chars);
+    expect(second.payload.ledger.checkpoints).toBe(first.payload.ledger.checkpoints + 1);
+    expect(second.payload.ledger.ops).toBeGreaterThan(first.payload.ledger.ops);
+    expect(second.payload.text_hash).not.toBe(first.payload.text_hash);
+    expect(second.payload.signature).not.toBe(first.payload.signature);
   });
 });
