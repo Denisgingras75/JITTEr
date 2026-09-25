@@ -2,9 +2,13 @@
 // Uses Web Crypto API for ECDSA signatures (no external dependencies)
 
 const CryptoUtils = {
-    // The server's countersigning public key. Paste the output of
-    // supabase/scripts/gen-server-key.mjs here; null means server signatures
-    // are reported as "unchecked" rather than verified.
+    // The server's countersigning public keys, by server_key_id (the id the
+    // attest response carries). Paste the output of
+    // supabase/scripts/gen-server-key.mjs here, e.g. { "k1": { kty: 'EC', ... } }.
+    // A signature whose key id has no entry is reported as "unchecked".
+    SERVER_PUBLIC_KEYS: {},
+    // Legacy single entry: consulted when the badge carries no server_key_id,
+    // or as the fallback for an id that is not in SERVER_PUBLIC_KEYS.
     SERVER_PUBLIC_JWK: null,
 
     // Fields added to a badge after it was signed by the device. The device
@@ -278,11 +282,20 @@ const CryptoUtils = {
         }
     },
 
-    // 'valid' | 'invalid' | 'unchecked' (no server key configured)
-    async verifyServerSignature(attestation, signatureBase64) {
-        if (!this.SERVER_PUBLIC_JWK) return 'unchecked';
+    // The public key for a server key id: SERVER_PUBLIC_KEYS[keyId], else the
+    // legacy SERVER_PUBLIC_JWK; null when nothing is configured for it.
+    serverPublicKey(keyId) {
+        const keys = this.SERVER_PUBLIC_KEYS && typeof this.SERVER_PUBLIC_KEYS === 'object' ? this.SERVER_PUBLIC_KEYS : {};
+        if (keyId != null && Object.prototype.hasOwnProperty.call(keys, keyId) && keys[keyId]) return keys[keyId];
+        return this.SERVER_PUBLIC_JWK || null;
+    },
+
+    // 'valid' | 'invalid' | 'unchecked' (no server key configured for that id)
+    async verifyServerSignature(attestation, signatureBase64, keyId) {
+        const jwk = this.serverPublicKey(keyId);
+        if (!jwk) return 'unchecked';
         try {
-            const ok = await this.verifyBadge(attestation, signatureBase64, this.SERVER_PUBLIC_JWK);
+            const ok = await this.verifyBadge(attestation, signatureBase64, jwk);
             return ok ? 'valid' : 'invalid';
         } catch (error) {
             return 'invalid';

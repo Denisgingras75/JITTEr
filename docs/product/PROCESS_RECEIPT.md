@@ -49,7 +49,7 @@ Top-level fields are kept where older verifiers and the attest server expect the
 - `typed_share` = typed_chars / (typed_chars + pasted_chars); it is a share of what was *entered*, not of the final text (deletions make those differ).
 - `timeline.buckets` are counts per bucket since `started_at`; buckets with no activity are omitted. `bucket_ms` is 60 000 while the span is ≤ 4 h, 300 000 up to 20 h, otherwise 3 600 000 — at most 240 buckets. Deleted counts are characters removed (a selection of 40 characters deleted at once counts 40).
 - `war` is the shared engine's typing-rhythm score for the whole document (`JitterWAR` via `JitterBio.scoreWAR`); the receipt carries it as one statistic. `war_uncapped` is the same number (the Writer applies no age cap).
-- Size target: under 8 KB for a 5 000-character essay.
+- Size: typically 5–10 KB for a 5 000-character essay written over a few hours; the timeline caps at 240 buckets, so a receipt never exceeds about 16 KB.
 - Signed with `CryptoUtils.signBadge` over `canonicalJson` of everything except `CryptoUtils.UNSIGNED_FIELDS` (`signature`, `attestation`, `server_signature`, `server_key_id`), exactly as the extension's badges are today, so the attest server, `verify-page.js` and `content.js`'s certificate all keep working.
 
 ## Ledger format (local file, the student's to share)

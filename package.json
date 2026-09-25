@@ -7,7 +7,7 @@
   },
   "scripts": {
     "test": "npm run test:unit && npm run test:backend && npm run test:e2e",
-    "test:unit": "node tests/war-scorer.test.js && node tests/crypto-utils.test.js && node tests/wgh-widget.test.js && node tests/sdk.test.js && node tests/bot-battery.test.js && node tests/ideas-audit.test.js",
+    "test:unit": "node tests/war-scorer.test.js && node tests/crypto-utils.test.js && node tests/receipt-utils.test.js && node tests/wgh-widget.test.js && node tests/sdk.test.js && node tests/bot-battery.test.js && node tests/ideas-audit.test.js",
     "test:backend": "deno run -A --import-map=supabase/tests/import_map.json supabase/tests/run.ts",
     "typecheck:backend": "deno check --import-map=supabase/tests/import_map.typecheck.json supabase/functions/attest/index.ts supabase/functions/verify/index.ts supabase/functions/erase/index.ts",
     "dev:functions": "deno run -A --import-map=supabase/tests/import_map.json supabase/tests/serve.ts",
