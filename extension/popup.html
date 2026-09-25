@@ -3,134 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jitter Protocol</title>
+  <title>JITTEr</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 360px;
+      width: 340px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0a0a0a;
+      font-size: 13px;
+      line-height: 1.45;
+      background: #0f0f10;
       color: #e5e5e5;
     }
-    .header {
-      padding: 20px;
-      text-align: center;
+    header {
+      padding: 14px 18px 12px;
       border-bottom: 1px solid #262626;
-    }
-    .header h1 { font-size: 22px; font-weight: 700; }
-    .header p { font-size: 12px; color: #737373; margin-top: 4px; }
-    .content { padding: 20px; }
-    .stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      align-items: baseline;
       gap: 10px;
-      margin-bottom: 16px;
     }
-    .stat-card {
-      background: #171717;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid #262626;
-    }
-    .stat-card.full { grid-column: 1 / -1; }
-    .stat-label {
+    header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; }
+    header p { font-size: 12px; color: #8a8a8a; }
+    section { padding: 14px 18px; border-bottom: 1px solid #1f1f1f; }
+    section:last-of-type { border-bottom: none; }
+    .label {
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #737373;
+      letter-spacing: 0.6px;
+      color: #8a8a8a;
+      margin-bottom: 6px;
+    }
+    .origin {
+      font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #fff;
+      word-break: break-all;
       margin-bottom: 4px;
     }
-    .stat-value { font-size: 24px; font-weight: 700; }
-    .stat-value.war { color: #00F0FF; }
-
-    .user-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #171717;
-      border: 1px solid #262626;
-      border-radius: 10px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-    }
-    .user-info { font-size: 13px; }
-    .user-email { color: #737373; font-size: 11px; }
-
+    .state { color: #b5b5b5; margin-bottom: 10px; }
+    .state.on { color: #4cd9c0; }
+    .state.error { color: #ff7b7b; }
+    .note { color: #8a8a8a; font-size: 12px; margin-top: 10px; }
+    dl { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 4px; }
+    dt { color: #8a8a8a; }
+    dd { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
     .btn {
       display: block;
       width: 100%;
-      padding: 12px;
-      border: none;
+      padding: 10px 12px;
+      border: 1px solid #2f2f2f;
       border-radius: 8px;
+      background: #1a1a1b;
+      color: #e5e5e5;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       text-align: center;
-      margin-bottom: 8px;
-      transition: all 0.15s;
     }
-    .btn-primary { background: #00F0FF22; color: #00F0FF; border: 1px solid #00F0FF44; }
-    .btn-primary:hover { background: #00F0FF33; }
-    .btn-secondary { background: #171717; color: #a3a3a3; border: 1px solid #262626; }
-    .btn-secondary:hover { background: #262626; }
-    .btn-google { background: #1a1a1a; color: #fff; border: 1px solid #333; }
-    .btn-google:hover { background: #262626; border-color: #00F0FF; color: #00F0FF; }
-    .btn-signout { background: none; color: #525252; border: 1px solid #262626; font-size: 11px; padding: 6px 12px; width: auto; }
-
-    .footer {
-      padding: 12px 20px;
-      border-top: 1px solid #262626;
-      text-align: center;
-      font-size: 11px;
-      color: #525252;
-    }
+    .btn + .btn { margin-top: 8px; }
+    .btn:hover:not(:disabled) { background: #242425; border-color: #3d3d3d; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn.primary { background: #123c39; border-color: #1f6b63; color: #9df0dd; }
+    .btn.primary:hover:not(:disabled) { background: #174a46; }
+    .btn.quiet { background: transparent; color: #b5b5b5; font-weight: 500; }
+    .result { margin-top: 10px; color: #b5b5b5; }
+    .result.ok { color: #4cd9c0; }
+    .result.error { color: #ff7b7b; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>⚡ JITTER</h1>
-    <p>Biometric Verification Protocol</p>
-  </div>
+  <header>
+    <h1>JITTEr</h1>
+    <p>Process receipts for written work</p>
+  </header>
 
-  <div class="content">
-    <!-- Auth state -->
-    <div id="auth-logged-out">
-      <button class="btn btn-google" id="sign-in-btn">Sign in with Google</button>
-    </div>
-    <div id="auth-logged-in" style="display:none;">
-      <div class="user-bar">
-        <div>
-          <div class="user-info" id="user-display">Signed in</div>
-          <div class="user-email" id="user-email"></div>
-        </div>
-        <button class="btn-signout" id="sign-out-btn">Sign out</button>
-      </div>
-    </div>
+  <section>
+    <div class="label">This site</div>
+    <div class="origin" id="site-origin">…</div>
+    <div class="state" id="site-state">Checking…</div>
+    <button class="btn primary" id="site-toggle" disabled>Enable on this site</button>
+    <p class="note">JITTEr records typing rhythm only, never text, and only on sites you enable.</p>
+  </section>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card full">
-        <div class="stat-label">Passport Level</div>
-        <div class="stat-value war" id="level">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Keys</div>
-        <div class="stat-value" id="totalKeys">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Sessions</div>
-        <div class="stat-value" id="sessions">0</div>
-      </div>
-    </div>
+  <section>
+    <div class="label">This device</div>
+    <dl>
+      <dt>First used</dt><dd id="pp-first">—</dd>
+      <dt>Sessions</dt><dd id="pp-sessions">0</dd>
+      <dt>Keystrokes</dt><dd id="pp-keys">0</dd>
+    </dl>
+  </section>
 
-    <button class="btn btn-primary" id="open-writer-btn">Open Writer</button>
-    <button class="btn btn-secondary" id="open-verifier-btn">Verify Badge</button>
-  </div>
+  <section>
+    <button class="btn" id="open-writer">Open Writer</button>
+    <button class="btn" id="open-verify">Verify a receipt</button>
+  </section>
 
-  <div class="footer">
-    We see HOW you type, never WHAT you type.
-  </div>
+  <section>
+    <button class="btn quiet" id="erase">Delete my server records</button>
+    <div class="result" id="erase-result" hidden></div>
+  </section>
 
-  <script src="popup.js"></script>
+  <script src="src/popup.js"></script>
 </body>
 </html>

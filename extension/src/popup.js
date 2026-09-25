@@ -1,241 +1,175 @@
 /**
- * ANVIL Popup Script
- * Manages extension popup UI and controls
+ * popup.js - JITTEr toolbar popup
+ *
+ * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
+ *
+ * Capture opt-in for the current site, the device's passport summary, the
+ * Writer and verify pages, and erasing this device's server records.
+ * The host permission is requested here, from the click, because Chrome only
+ * grants it during a user gesture; the service worker does the rest.
  */
 
-// ============================================================================
-// DOM ELEMENTS
-// ============================================================================
-
-const elements = {
-  purity: document.getElementById('purity'),
-  humanChars: document.getElementById('humanChars'),
-  alienChars: document.getElementById('alienChars'),
-  jitter: document.getElementById('jitter'),
-  sessionTime: document.getElementById('sessionTime'),
-  sessionStart: document.getElementById('sessionStart'),
-  statusIndicator: document.getElementById('statusIndicator'),
-  projectToggle: document.getElementById('projectToggle'),
-  resetBtn: document.getElementById('resetBtn'),
-  generateBadgeBtn: document.getElementById('generateBadgeBtn'),
-  openWriterBtn: document.getElementById('openWriterBtn')
+const els = {
+  origin: document.getElementById('site-origin'),
+  state: document.getElementById('site-state'),
+  toggle: document.getElementById('site-toggle'),
+  first: document.getElementById('pp-first'),
+  sessions: document.getElementById('pp-sessions'),
+  keys: document.getElementById('pp-keys'),
+  openWriter: document.getElementById('open-writer'),
+  openVerify: document.getElementById('open-verify'),
+  erase: document.getElementById('erase'),
+  eraseResult: document.getElementById('erase-result'),
 };
 
-// ============================================================================
-// STATE
-// ============================================================================
+const site = { origin: null, tabId: null, enabled: false, supported: false, busy: false };
 
-let currentStats = {
-  humanChars: 0,
-  alienChars: 0,
-  purity: 100,
-  jitter: 0,
-  projectMode: false,
-  sessionStart: Date.now()
-};
-
-let resetHoldTimer = null;
-let resetHoldStartTime = null;
-
-// ============================================================================
-// STATS LOADING & UPDATE
-// ============================================================================
-
-async function loadStats() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATS' });
-
-    if (response) {
-      currentStats = response;
-      updateUI();
-    }
-  } catch (error) {
-    console.warn('[Anvil] Failed to load stats:', error);
-  }
-}
-
-function updateUI() {
-  // Update stats
-  elements.purity.textContent = currentStats.purity + '%';
-  elements.humanChars.textContent = formatNumber(currentStats.humanChars);
-  elements.alienChars.textContent = formatNumber(currentStats.alienChars);
-  elements.jitter.textContent = currentStats.jitter;
-
-  // Update session time
-  const sessionDuration = Date.now() - currentStats.sessionStart;
-  elements.sessionTime.textContent = formatDuration(sessionDuration);
-  elements.sessionStart.textContent = new Date(currentStats.sessionStart).toLocaleTimeString();
-
-  // Update project mode toggle
-  if (currentStats.projectMode) {
-    elements.projectToggle.classList.add('active');
-    elements.statusIndicator.style.background = '#4ade80'; // Green
-  } else {
-    elements.projectToggle.classList.remove('active');
-    elements.statusIndicator.style.background = '#ef4444'; // Red
-  }
-}
-
-// ============================================================================
-// PROJECT MODE TOGGLE
-// ============================================================================
-
-elements.projectToggle.addEventListener('click', async () => {
-  const newState = !currentStats.projectMode;
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    await chrome.tabs.sendMessage(tab.id, {
-      type: 'TOGGLE_PROJECT_MODE',
-      enabled: newState
-    });
-
-    currentStats.projectMode = newState;
-    updateUI();
-  } catch (error) {
-    console.error('[Anvil] Failed to toggle project mode:', error);
-    alert('Failed to toggle project mode. Make sure you are on a valid web page.');
-  }
-});
-
-// ============================================================================
-// HOLD-TO-RESET MECHANIC (2 seconds)
-// ============================================================================
-
-elements.resetBtn.addEventListener('mousedown', () => {
-  resetHoldStartTime = Date.now();
-
-  elements.resetBtn.classList.add('holding');
-  elements.resetBtn.textContent = 'Hold... 2s';
-
-  resetHoldTimer = setTimeout(async () => {
-    // Reset confirmed
+function send(message) {
+  return new Promise((resolve) => {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-      await chrome.tabs.sendMessage(tab.id, { type: 'RESET_STATS' });
-
-      currentStats.humanChars = 0;
-      currentStats.alienChars = 0;
-      currentStats.purity = 100;
-      currentStats.jitter = 0;
-      currentStats.sessionStart = Date.now();
-
-      updateUI();
-
-      elements.resetBtn.textContent = '✓ Reset Complete';
-      setTimeout(() => {
-        elements.resetBtn.textContent = 'Hold to Reset (2s)';
-      }, 2000);
-    } catch (error) {
-      console.error('[Anvil] Failed to reset:', error);
-      alert('Failed to reset stats.');
+      chrome.runtime.sendMessage(message, (res) => {
+        if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+        else resolve(res || { ok: false, error: 'No answer from the extension.' });
+      });
+    } catch (e) {
+      resolve({ ok: false, error: e.message });
     }
-
-    elements.resetBtn.classList.remove('holding');
-  }, 2000);
-});
-
-elements.resetBtn.addEventListener('mouseup', () => {
-  clearTimeout(resetHoldTimer);
-  elements.resetBtn.classList.remove('holding');
-  elements.resetBtn.textContent = 'Hold to Reset (2s)';
-});
-
-elements.resetBtn.addEventListener('mouseleave', () => {
-  clearTimeout(resetHoldTimer);
-  elements.resetBtn.classList.remove('holding');
-  elements.resetBtn.textContent = 'Hold to Reset (2s)';
-});
-
-// ============================================================================
-// BADGE GENERATION
-// ============================================================================
-
-elements.generateBadgeBtn.addEventListener('click', async () => {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    const sessionDuration = Date.now() - currentStats.sessionStart;
-
-    const response = await chrome.runtime.sendMessage({
-      type: 'GENERATE_BADGE',
-      humanChars: currentStats.humanChars,
-      alienChars: currentStats.alienChars,
-      purity: currentStats.purity,
-      jitter: currentStats.jitter,
-      url: tab.url,
-      sessionDuration: sessionDuration
-    });
-
-    if (response.success) {
-      // Copy HTML to clipboard
-      await navigator.clipboard.writeText(response.html);
-
-      elements.generateBadgeBtn.textContent = '✓ Badge Copied!';
-      elements.generateBadgeBtn.style.background = 'rgba(34, 197, 94, 0.8)';
-
-      setTimeout(() => {
-        elements.generateBadgeBtn.textContent = 'Generate Smart Badge';
-        elements.generateBadgeBtn.style.background = '';
-      }, 2000);
-    }
-  } catch (error) {
-    console.error('[Anvil] Failed to generate badge:', error);
-    alert('Failed to generate badge.');
-  }
-});
-
-// ============================================================================
-// OPEN WRITER
-// ============================================================================
-
-elements.openWriterBtn.addEventListener('click', () => {
-  chrome.windows.create({
-    url: chrome.runtime.getURL('writer.html'),
-    type: 'popup',
-    width: 1200,
-    height: 800
   });
+}
+
+function originOf(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return u.origin;
+  } catch (e) {}
+  return null;
+}
+
+// --- This site ---
+
+async function loadSite() {
+  let tab = null;
+  try {
+    [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  } catch (e) {}
+  site.tabId = tab && Number.isInteger(tab.id) ? tab.id : null;
+  site.origin = originOf(tab && tab.url);
+  site.supported = !!site.origin;
+
+  if (!site.supported) {
+    site.enabled = false;
+    renderSite('Capture is not available on this page.');
+    return;
+  }
+  const status = await send({ action: 'siteStatus', origin: site.origin });
+  site.enabled = !!(status && status.ok && status.enabled);
+  renderSite();
+}
+
+function renderSite(message, isError) {
+  els.origin.textContent = site.origin || 'This page';
+  els.toggle.disabled = !site.supported || site.busy;
+  els.toggle.textContent = site.enabled ? 'Disable on this site' : 'Enable on this site';
+  els.toggle.classList.toggle('primary', !site.enabled);
+  els.state.className = 'state' + (isError ? ' error' : site.enabled ? ' on' : '');
+  if (message) els.state.textContent = message;
+  else els.state.textContent = site.enabled ? 'Capture is on for this site.' : 'Capture is off for this site.';
+}
+
+els.toggle.addEventListener('click', async () => {
+  if (!site.supported || site.busy) return;
+  site.busy = true;
+  renderSite(site.enabled ? 'Turning off…' : 'Asking Chrome for access…');
+
+  if (site.enabled) {
+    const res = await send({ action: 'disableSite', origin: site.origin });
+    site.busy = false;
+    if (res && res.ok) { site.enabled = false; renderSite(); }
+    else renderSite('Could not turn capture off: ' + (res && res.error ? res.error : 'unknown error'), true);
+    return;
+  }
+
+  // permissions.request must run inside the click: it is the first await.
+  let granted = false;
+  let requestError = null;
+  try {
+    granted = await chrome.permissions.request({ origins: [site.origin + '/*'] });
+  } catch (e) {
+    requestError = e && e.message ? e.message : String(e);
+  }
+  if (!granted) {
+    site.busy = false;
+    renderSite(requestError ? 'Chrome refused the request: ' + requestError : 'Access was not granted. Capture stays off.', !!requestError);
+    return;
+  }
+  const res = await send({ action: 'enableSite', origin: site.origin, tabId: site.tabId });
+  site.busy = false;
+  if (res && res.ok) {
+    site.enabled = true;
+    renderSite(res.injected ? 'Capture is on for this site.' : 'Capture is on for this site. Reload the page to start.');
+  } else {
+    renderSite('Could not turn capture on: ' + (res && res.error ? res.error : 'unknown error'), true);
+  }
 });
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+// --- This device ---
 
-function formatNumber(num) {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toString();
+function loadPassport() {
+  try {
+    chrome.storage.local.get('passport', (data) => {
+      const p = (data && data.passport) || {};
+      els.first.textContent = p.firstUsed ? new Date(p.firstUsed).toLocaleDateString() : '—';
+      els.sessions.textContent = String(p.sessionsCompleted || 0);
+      els.keys.textContent = Number(p.totalKeystrokes || 0).toLocaleString();
+    });
+  } catch (e) {}
 }
 
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
+// --- Pages ---
 
-  if (hours > 0) {
-    return hours + 'h ' + (minutes % 60) + 'm';
-  } else if (minutes > 0) {
-    return minutes + 'm ' + (seconds % 60) + 's';
+els.openWriter.addEventListener('click', () => {
+  chrome.windows.create({ url: chrome.runtime.getURL('writer.html'), type: 'popup', width: 1200, height: 800 });
+  window.close();
+});
+
+els.openVerify.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('verify.html') });
+  window.close();
+});
+
+// --- Erase ---
+
+els.erase.addEventListener('click', async () => {
+  const sure = confirm(
+    'Delete every record the JITTEr server holds for this device?\n\n' +
+    'Receipts you already handed out keep their signature, but the server will no longer confirm them. ' +
+    'This device then starts over with a new key and an empty passport.'
+  );
+  if (!sure) return;
+
+  els.erase.disabled = true;
+  showEraseResult('Deleting…', '');
+  const res = await send({ action: 'erase' });
+  els.erase.disabled = false;
+
+  if (res && res.ok) {
+    // The server reports { attestations, profiles, devices } counts.
+    const d = res.deleted && typeof res.deleted === 'object' ? res.deleted : null;
+    const total = d ? ['attestations', 'profiles', 'devices'].reduce((n, k) => n + (Number(d[k]) || 0), 0) : null;
+    const count = total == null ? 'Records' : total + (total === 1 ? ' record' : ' records');
+    showEraseResult(count + ' deleted on the server. This device now has a new key; reload any open pages.', 'ok');
+    loadPassport();
   } else {
-    return seconds + 's';
+    const status = res && res.status ? ' (HTTP ' + res.status + ')' : '';
+    showEraseResult('Nothing was deleted: ' + (res && res.error ? res.error : 'unknown error') + status, 'error');
   }
+});
+
+function showEraseResult(text, kind) {
+  els.eraseResult.textContent = text;
+  els.eraseResult.className = 'result' + (kind ? ' ' + kind : '');
+  els.eraseResult.hidden = false;
 }
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
-(async function init() {
-  await loadStats();
-
-  // Auto-refresh stats every 2 seconds
-  setInterval(loadStats, 2000);
-})();
+loadSite();
+loadPassport();

@@ -29,6 +29,64 @@ let project = { isActive: false, humanKeystrokes: 0, pasteCount: 0, startTime: n
 // --- LOKI BIOMETRICS ---
 let bioSession = JitterBio.createSession();
 
+// --- CAPTURE SCOPE ---
+// This script only runs on sites the user enabled (background.js registers it
+// per origin). Within a page, timing is recorded only for ordinary text
+// fields: <textarea>, contenteditable, and <input> of type text, search or
+// none. Password, e-mail, phone, number, URL and every other input type are
+// never touched, nor are fields marked for payment cards, one-time codes or
+// passwords through autocomplete, nor anything under data-jitter-ignore.
+const CAPTURABLE_INPUT_TYPES = new Set(['text', 'search']);
+const SENSITIVE_AUTOCOMPLETE = new Set(['one-time-code', 'current-password', 'new-password']);
+
+function isCapturable(target) {
+    let el = target;
+    if (el && el.nodeType === 3) el = el.parentElement; // text node inside an editor
+    if (!el || el.nodeType !== 1 || typeof el.getAttribute !== 'function') return false;
+    if (el.closest('[data-jitter-ignore]')) return false;
+    const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
+    if (autocomplete.some(token => token.startsWith('cc-') || SENSITIVE_AUTOCOMPLETE.has(token))) return false;
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA') return true;
+    if (tag === 'INPUT') {
+        const type = (el.getAttribute('type') || 'text').trim().toLowerCase();
+        return CAPTURABLE_INPUT_TYPES.has(type);
+    }
+    return !!el.isContentEditable;
+}
+
+// The popup can turn capture off (and back on) for this site while the page
+// is open; the background relays it here.
+let captureOn = true;
+
+function stopCapture() {
+    captureOn = false;
+    ['jitter-shield', 'jitter-menu', 'jitter-hud'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+}
+
+function resumeCapture() {
+    captureOn = true;
+    if (!isIframe) updateUI();
+}
+
+// Passport bookkeeping (dates, level, daily count, session history) lives in
+// passport-utils.js, loaded ahead of this file.
+function touchPassport(keys, isSessionEnd) {
+    if (typeof PassportUtils !== 'undefined') PassportUtils.updatePassport(passport, keys, isSessionEnd);
+    else passport.lastUsed = Date.now();
+}
+
+try {
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+        if (!msg || typeof msg.action !== 'string') return;
+        if (msg.action === 'captureOff') { stopCapture(); sendResponse({ ok: true }); }
+        else if (msg.action === 'captureOn') { resumeCapture(); sendResponse({ ok: true }); }
+    });
+} catch (e) {}
+
 // --- INIT ---
 function loadData() {
     try {
@@ -37,12 +95,8 @@ function loadData() {
             if (result.passport) {
                 passport = result.passport;
             }
-            // Initialize timestamps if first time
-            if (!passport.firstUsed) {
-                passport.firstUsed = Date.now();
-            }
-            passport.lastUsed = Date.now();
-            updatePassportLevel();
+            // Stamps firstUsed/lastUsed and the level; drops fields older versions stored
+            touchPassport(0, false);
             saveData();
             if (result[currentURL]) project = result[currentURL];
             if (!isIframe) { updateUI(); runScanner(); }
@@ -58,11 +112,11 @@ let scannerTimer = null;
 
 document.addEventListener('focusin', (e) => {
     if (e.target.id && e.target.id.includes('jitter')) return;
-    lastActiveElement = e.target;
+    if (isCapturable(e.target)) lastActiveElement = e.target;
 }, true);
 
 document.addEventListener('input', (e) => {
-    if (!project.isActive) return;
+    if (!captureOn || !project.isActive || !isCapturable(e.target)) return;
     lastActiveElement = e.target;
     if(!isIframe) updateUI();
 }, true);
@@ -70,8 +124,10 @@ document.addEventListener('input', (e) => {
 // --- KEYSTROKE DYNAMICS ---
 // Only real input counts: page scripts can dispatch synthetic key events
 // (isTrusted=false), and auto-repeat from a held key is not a keystroke.
+// And only in a capturable field (isCapturable above).
 window.addEventListener('keydown', (e) => {
-    if (!e.isTrusted || e.repeat || typeof e.key !== 'string') return;
+    if (!captureOn || !e.isTrusted || e.repeat || typeof e.key !== 'string') return;
+    if (!isCapturable(e.target)) return;
     if (e.key === 'Backspace' || e.key === 'Delete') {
         JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
         if (project.isActive) updateUI();
@@ -81,8 +137,7 @@ window.addEventListener('keydown', (e) => {
     const result = JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
     if (result === 'char') {
         passport.totalKeystrokes++;
-        passport.lastUsed = Date.now();
-        updatePassportLevel();
+        touchPassport(1, false);
         if (project.isActive) {
             project.humanKeystrokes++;
             if(!isIframe) updateUI();
@@ -93,28 +148,20 @@ window.addEventListener('keydown', (e) => {
 }, true);
 
 window.addEventListener('keyup', (e) => {
-    if (!e.isTrusted || typeof e.key !== 'string') return;
+    if (!captureOn || !e.isTrusted || typeof e.key !== 'string') return;
+    if (!isCapturable(e.target)) return;
     JitterBio.handleKeyup(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
 }, true);
 
+// Mouse sampling is not tied to a field: it is the pointer path on the page.
 document.addEventListener('mousemove', (e) => {
-    if (!e.isTrusted) return;
+    if (!captureOn || !e.isTrusted) return;
     JitterBio.handleMouseMove(bioSession, e.clientX, e.clientY);
 });
 
-function updatePassportLevel() {
-    const k = passport.totalKeystrokes;
-    if (k < 1000) passport.level = "Novice";
-    else if (k < 5000) passport.level = "Beginner";
-    else if (k < 15000) passport.level = "Intermediate";
-    else if (k < 50000) passport.level = "Advanced";
-    else if (k < 150000) passport.level = "Expert";
-    else passport.level = "Master";
-}
-
 // --- UTILS ---
 window.addEventListener('paste', (e) => {
-    if (!e.isTrusted) return;
+    if (!captureOn || !e.isTrusted || !isCapturable(e.target)) return;
     const pastedText = e.clipboardData?.getData('text') || '';
     if (pastedText.length > 0) {
         // Always track paste in bio session (WAR purity signal)
@@ -128,19 +175,25 @@ window.addEventListener('paste', (e) => {
     if(!isIframe) updateUI();
 }, true);
 
-function certifiedText() {
+// The field a badge certifies: the last capturable field that had focus.
+// Never a password or another excluded field, even if it is focused right now.
+function certifiedField() {
     let target = lastActiveElement;
     if (!target || !document.contains(target)) target = document.activeElement;
     if (!target || target.tagName === 'BODY' || target.tagName === 'HTML') return null;
+    return isCapturable(target) ? target : null;
+}
+
+function certifiedText() {
+    const target = certifiedField();
+    if (!target) return null;
     if (target.value !== undefined) return target.value;
     if (target.isContentEditable) return target.innerText;
     return null;
 }
 
 function calculateStats() {
-    let target = lastActiveElement;
-    if (!target || !document.contains(target)) target = document.activeElement;
-    if (target && (target.tagName === 'BODY' || target.tagName === 'HTML')) target = null;
+    const target = certifiedField();
 
     let totalCharsInBox = 0;
     if (target) {
@@ -148,13 +201,13 @@ function calculateStats() {
         else if (target.isContentEditable) totalCharsInBox = target.innerText.length;
     }
 
-    const loki = JitterBio.analyzeLoki(bioSession);
+    // Integrity is a share (typed here / characters in the field), never a
+    // label: rhythm flags do not zero it.
     let integrity = 100;
     if (totalCharsInBox > 0) {
         integrity = Math.round((bioSession.humanChars / totalCharsInBox) * 100);
         if (integrity > 100) integrity = 100;
     } else if (bioSession.humanChars > 0) integrity = 100;
-    if (loki.isBot) integrity = 0;
 
     return { typed: bioSession.humanChars, total: totalCharsInBox, integrity, pastes: bioSession.pasteCount };
 }
@@ -180,11 +233,10 @@ function updateUI() {
     let statusText = `${stats.integrity}%`;
 
     if (project.isActive) {
-        const loki = JitterBio.analyzeLoki(bioSession);
-        if (loki.isBot) {
-            statusColor = '#FF0000';
-            statusText = "SYNTHETIC";
-        } else if (stats.integrity < 80) statusColor = '#FF0055';
+        // The shield shows how much of the field was typed here; it never
+        // labels the writer. Rhythm flags travel inside the badge for the
+        // server to weigh.
+        if (stats.integrity < 80) statusColor = '#FF0055';
 
         shield.className = 'jitter-active';
         shield.style.borderColor = statusColor;
@@ -251,7 +303,7 @@ function bindButtons(s) {
         if (el) el.onclick = (e) => { if (e.isTrusted) handlers[id](); };
     });
 }
-function setupUI(){if(document.getElementById('jitter-shield'))return;const s=document.createElement('div');s.id='jitter-shield';s.className='jitter-passive';s.innerHTML='⚡';const m=document.createElement('div');m.id='jitter-menu';m.style.display='none';document.body.append(s,m);const st=document.createElement('style');st.textContent=`#jitter-shield{position:fixed;bottom:20px;right:20px;background:#000;color:#444;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:2147483647;box-shadow:0 0 10px rgba(0,0,0,0.5);border:2px solid #333;transition:all 0.2s ease;user-select:none}#jitter-shield:hover{transform:scale(1.1);color:#fff;border-color:#fff;box-shadow:0 0 20px #ffffff66}#jitter-shield.jitter-active{border-color:#00F0FF!important;color:#00F0FF!important;box-shadow:0 0 15px #00F0FF66!important}#jitter-menu{position:fixed;bottom:75px;right:20px;background:#050505;color:#fff;border-radius:4px;font-family:'Courier New',monospace;z-index:2147483647;box-shadow:0 0 30px rgba(0,0,0,0.8);border:1px solid #333;width:240px;overflow:hidden}.jitter-header{padding:15px;background:#111;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between}.jitter-body{padding:15px}.jitter-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#aaa}.jitter-val{color:#fff;font-weight:600}.jitter-btn{background:#111;color:#fff;text-align:center;padding:12px;border-radius:2px;cursor:pointer;margin-top:12px;font-weight:600;font-size:12px;transition:all 0.1s ease;border:1px solid #333;letter-spacing:1px;user-select:none}.jitter-btn:hover{background:#222;border-color:#fff;color:#fff;box-shadow:0 0 10px rgba(255,255,255,0.2)}.jitter-btn.primary{background:#00F0FF11;color:#00F0FF;border-color:#00F0FF44}#btn-open-writer{margin-top:15px;border:1px solid #666;color:#ccc;background:#1a1a1a;box-shadow:0 0 5px rgba(0,0,0,0.5)}#btn-open-writer:hover{border-color:#00F0FF;color:#00F0FF;background:#00F0FF11;box-shadow:0 0 15px #00F0FF66;text-shadow:0 0 5px #00F0FF}`;document.head.appendChild(st);s.addEventListener('click',()=>{const x=document.getElementById('jitter-menu');x.style.display=(x.style.display==='none')?'block':'none';updateUI()})}
+function setupUI(){if(document.getElementById('jitter-shield'))return;const s=document.createElement('div');s.id='jitter-shield';s.className='jitter-passive';s.innerHTML='⚡';const m=document.createElement('div');m.id='jitter-menu';m.style.display='none';document.body.append(s,m);if(!document.getElementById('jitter-style')){const st=document.createElement('style');st.id='jitter-style';st.textContent=`#jitter-shield{position:fixed;bottom:20px;right:20px;background:#000;color:#444;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:2147483647;box-shadow:0 0 10px rgba(0,0,0,0.5);border:2px solid #333;transition:all 0.2s ease;user-select:none}#jitter-shield:hover{transform:scale(1.1);color:#fff;border-color:#fff;box-shadow:0 0 20px #ffffff66}#jitter-shield.jitter-active{border-color:#00F0FF!important;color:#00F0FF!important;box-shadow:0 0 15px #00F0FF66!important}#jitter-menu{position:fixed;bottom:75px;right:20px;background:#050505;color:#fff;border-radius:4px;font-family:'Courier New',monospace;z-index:2147483647;box-shadow:0 0 30px rgba(0,0,0,0.8);border:1px solid #333;width:240px;overflow:hidden}.jitter-header{padding:15px;background:#111;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between}.jitter-body{padding:15px}.jitter-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#aaa}.jitter-val{color:#fff;font-weight:600}.jitter-btn{background:#111;color:#fff;text-align:center;padding:12px;border-radius:2px;cursor:pointer;margin-top:12px;font-weight:600;font-size:12px;transition:all 0.1s ease;border:1px solid #333;letter-spacing:1px;user-select:none}.jitter-btn:hover{background:#222;border-color:#fff;color:#fff;box-shadow:0 0 10px rgba(255,255,255,0.2)}.jitter-btn.primary{background:#00F0FF11;color:#00F0FF;border-color:#00F0FF44}#btn-open-writer{margin-top:15px;border:1px solid #666;color:#ccc;background:#1a1a1a;box-shadow:0 0 5px rgba(0,0,0,0.5)}#btn-open-writer:hover{border-color:#00F0FF;color:#00F0FF;background:#00F0FF11;box-shadow:0 0 15px #00F0FF66;text-shadow:0 0 5px #00F0FF}`;document.head.appendChild(st)}s.addEventListener('click',()=>{const x=document.getElementById('jitter-menu');x.style.display=(x.style.display==='none')?'block':'none';updateUI()})}
 // Badge payloads arrive from untrusted links and pasted text: escape every
 // string before it goes anywhere near innerHTML.
 function escapeHtml(s) {
@@ -267,10 +319,11 @@ function escapeDeep(v) {
     }
     return v;
 }
-document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l)return;const u=l.href||"";if(u.includes(VERIFY_URL)){return}if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
+document.addEventListener('click',(e)=>{const l=e.target.closest('a');if(!l||!captureOn)return;const u=l.href||"";if(u.includes(VERIFY_URL)){return}if(u.includes(ANCHOR_PREFIX)||l.dataset.jitterPayload){e.preventDefault();e.stopPropagation();let b=l.dataset.jitterPayload||u.split(ANCHOR_PREFIX)[1];if(b)showCertificate(b)}},true);
 function runScanner(){scanLinks();new MutationObserver(()=>{if(scannerTimer)clearTimeout(scannerTimer);scannerTimer=setTimeout(scanLinks,500)}).observe(document.body,{childList:true,subtree:true})}
 function scanLinks(){document.querySelectorAll('a').forEach(l=>{if(l.dataset.jitterProcessed||!l.href.includes(ANCHOR_PREFIX))return;l.style.borderBottom="2px solid #00F0FF";l.style.textDecoration="none";l.dataset.jitterProcessed="true";l.addEventListener('mouseenter',(e)=>showMiniHUD(l.href.split(ANCHOR_PREFIX)[1],e.clientX,e.clientY));l.addEventListener('mouseleave',hideMiniHUD)})}
 function showMiniHUD(b, x, y) {
+    if (!captureOn) return;
     try {
         const d = escapeDeep(JSON.parse(atob(b)));
         hideMiniHUD();
@@ -286,9 +339,11 @@ function showMiniHUD(b, x, y) {
 }
 function hideMiniHUD(){const h=document.getElementById('jitter-hud');if(h)h.remove()}
 async function showCertificate(b) {
+    if (!captureOn) return;
     try {
         const raw = JSON.parse(atob(b));
         const m = document.getElementById('jitter-menu');
+        if (!m) return;
         m.style.display = 'block';
 
         // Check the signature before showing anything as verified. This proves
@@ -353,11 +408,9 @@ async function showCertificate(b) {
 const MIN_KEYS_FOR_BADGE = 20; // same floor the attestation server applies
 
 async function copyBadge(s, isSessionEnd) {
+    // The badge records; it never refuses. Rhythm flags from the engine
+    // travel inside it (war_flags) for the server and the verifier to weigh.
     const loki = JitterBio.analyzeLoki(bioSession);
-    if (loki.isBot) {
-        alert("Verification Denied: Synthetic Behavior");
-        return;
-    }
     // A badge with nothing behind it proves nothing.
     if (s.typed < MIN_KEYS_FOR_BADGE) {
         alert(`Type at least ${MIN_KEYS_FOR_BADGE} characters before minting a badge (${s.typed} so far).`);
@@ -367,8 +420,12 @@ async function copyBadge(s, isSessionEnd) {
     const profile = JitterBio.getProfile(bioSession);
 
     // A session is completed when it is stopped, not on every mint
-    if (isSessionEnd) passport.sessionsCompleted++;
-    passport.lastUsed = Date.now();
+    if (isSessionEnd) {
+        passport.sessionsCompleted++;
+        touchPassport(s.typed, true);
+    } else {
+        passport.lastUsed = Date.now();
+    }
     saveData();
 
     // Calculate account age
@@ -439,8 +496,6 @@ async function copyBadge(s, isSessionEnd) {
         passportLevel: passport.level,
         accountAge: accountAgeDays,
         sessions: passport.sessionsCompleted,
-        suspicionScore: passport.suspicionScore || 0,
-        suspicionSignals: passport.suspicionSignals || [],
         // Crypto chain
         previousBadge: previousBadgeHash,
         publicKeyId: publicKeyFingerprint,
