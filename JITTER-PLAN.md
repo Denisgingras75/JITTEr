@@ -2,6 +2,8 @@
 **Read this before every Claude Code session.**
 *Last updated: 2026-03-05*
 
+> **Status note (2026-09-25).** This plan predates the product decision recorded in `CLAUDE.md` and `docs/product/PROCESS_RECEIPT.md`: the shipping product is the **Writer process receipt for classrooms** (proof of process and integrity, not of authorship or humanity). The passport / reputation direction below remains the longer-term thesis, and its economic claims ("time is the moat", "economically unfeasible") were measured and do not hold on the open web — see `docs/adversarial/PERSONA_MONTH.md`. Treat the WAR formula, paste rules and time caps here as the engine's specification; treat the economic claims as hypotheses that failed their first test.
+
 ---
 
 ## What JITTEr Is
