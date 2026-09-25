@@ -79,7 +79,7 @@ The branch now carries the fixes below (see `docs/architecture/TRUST_LAYER.md` f
 | P1-17 Loki gate refuses humans | Open (needs real data). |
 | P1-18 WGH capture path weakest | Partly: dwell measured per key (rollover fix); bigram/per-key data still missing on that path. |
 | P1-19 Engine forked | Fixed: `extension/src/war-score.js` is the one engine; SDK bundle and lab load it. |
-| P1-20 Tests protect nothing | Fixed: `npm test` runs unit, backend and 43 Playwright tests and fails on failure; `bot-battery` deterministic. No CI yet. |
+| P1-20 Tests protect nothing | Fixed: `npm test` runs 209 unit tests, 80 backend tests and 75 Playwright tests (Writer, verify page, capture scope, real extension, SDK) and fails on failure; `bot-battery` deterministic. No CI yet. |
 | P1-21 Android badge unsigned | Open (see TRUST_LAYER.md "Next"). |
 | SDK-b / SDK-c / SDK-e..h | SDK-b, e, f, g, h fixed; SDK-c (mobile/IME on the WGH path) open. |
 | P2 locale, held key, first-badge, badge id, BE-6 enumeration | Fixed. |
@@ -600,3 +600,15 @@ Methods:
 - Only aggregates are persisted.
 - It has 17 JVM unit tests on simulated sensor streams, and every safeguard was checked by breaking it and watching a test fail. It type-checks against API 34.
 - It still needs on-device calibration, and it inherits P0-9: the project must build first.
+
+`1ab5af2` · **One typing-rhythm engine** (`extension/src/war-score.js`) for the extension, the SDK bundle and the lab; paste weighted by length, never punished.
+
+`abf1051` · **Product decision.** The shipping product is the Writer process receipt for classrooms (proof of process and integrity, not of authorship or humanity). README rewritten to what exists; the "economically unfeasible" claims removed; `docs/adversarial/PERSONA_MONTH.md` records the measurements that falsified them (forged attestations accepted at 105/s and "verified" at day 31; a 40-line generator passes the engine 11/24; a persona-month costs 0.005 CPU-seconds).
+
+`d601b61` · **Backend.** Site-key allowlist, per-address hourly limit (salted hashes, never addresses), `/erase` (a device deletes everything the server holds about it with one signed request), server key rotation; 80 backend tests.
+
+`e2f881a` · **Extension hardening.** Capture is opt-in per site (no `<all_urls>`); never on password, payment or one-time-code fields; `identity` and Firebase permissions gone; the popup (previously dead) rebuilt; night-hours suspicion removed; a flagged session still mints a badge that carries the flags instead of a "Verification Denied" alert.
+
+`26810be` · **The Writer product.** Receipt v4 (`docs/product/PROCESS_RECEIPT.md`): ledger of operations only, hash-chained snapshots, autosave across sittings, signed receipt bound to the text; the teacher's verify page with sittings, active time, typed/pasted/deleted timeline, paste list, revision, rhythm ("one statistic, not a verdict"), ledger replay, and the fixed note on what a receipt does not say.
+
+Still open after all of the above: no real session has ever been captured (every threshold is uncalibrated); the server does not recompute the client's score; nothing is deployed (the Supabase project is paused; `*.supabase.co` serves the verify page as text); mobile and IME typing yield no keystrokes on the extension path; Anvil is unbuilt on a device.
