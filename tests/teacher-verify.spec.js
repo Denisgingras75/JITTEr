@@ -66,7 +66,7 @@ test.describe('Teacher Verification Flow', () => {
     await expect(result).toContainText('Signature valid');
     await expect(result).toContainText('Text not provided');
     await expect(result).toContainText('No server record');
-    await expect(result).toContainText('Process receipt v4.0');
+    await expect(result).toContainText('Process receipt v4.1');
     await expect(result).toContainText('jitter://writer');
     await expect(result).toContainText(receipt.payload.publicKeyId);
     await expect(result).toContainText('first receipt from this device');

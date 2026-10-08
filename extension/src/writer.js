@@ -1,5 +1,5 @@
 /**
- * writer.js - JITTEr Writer (process receipt v4.0)
+ * writer.js - JITTEr Writer (process receipt v4.1)
  *
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  *
@@ -9,9 +9,11 @@
  * this software is strictly prohibited without explicit written permission.
  * See LICENSE file for full terms.
  *
- * Records how a text is entered (typed / pasted / deleted, sittings, active
- * writing time, typing rhythm), autosaves the document on this device and
- * issues a signed process receipt. It records; it never refuses.
+ * Records how a text is entered (typed / pasted / entered another way /
+ * deleted, sittings, active writing time, typing rhythm), autosaves the
+ * document on this device and issues a signed process receipt. Every change
+ * in the text's length is accounted for: what keystrokes and pastes do not
+ * explain is recorded as entered another way. It records; it never refuses.
  * Contract: docs/product/PROCESS_RECEIPT.md.
  *
  * The ledger holds operations, never characters. Content snapshots (the
@@ -21,7 +23,9 @@
 const ATTEST_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/attest";
 const VERIFY_URL = "https://fmguuhnustgcqzgjaoil.supabase.co/functions/v1/verify";
 const DOC_KEY = 'writerDoc';           // one chrome.storage.local key for the whole document
-const RECEIPT_VERSION = '4.0';
+const RECEIPT_VERSION = '4.1';
+const READABLE_VERSIONS = new Set(['4.0', '4.1']); // autosaved drafts from 4.0 keep loading
+const INSERT_CHECKPOINT_MIN = 20; // text entered another way this large gets its own checkpoint, like a paste
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
 
 // --- STATE ---
@@ -39,6 +43,10 @@ let run = null;             // pending typing run { start, last, n }
 let runTimer = null;
 let blurred = false;
 let pasteSelection = 0;     // characters selected when a paste arrived (they are replaced)
+let pendingPaste = 0;       // length of the paste whose text has not landed yet
+let pendingTyped = 0;       // keystrokes counted since the last input event (they explain what it inserted)
+let composing = null;       // { startLen, selection } while an input method composes
+let imeKeySeen = false;     // a key went to an input method since the last input event
 let checkpointQueue = Promise.resolve();
 let saveTimer = null;
 let lastReceipt = null;     // { payload, json, base64, blockID }
@@ -204,13 +212,15 @@ function maybeCheckpoint(now) {
     if (now - doc.lastCheckpointAt >= JitterReceipt.CHECKPOINT_ACTIVITY_MS) takeCheckpoint('activity');
 }
 
-// Characters pasted between checkpoint idx-1 and idx (0 when none).
-function pastedBefore(idx) {
+// Characters pasted (op 'paste') or entered another way (op 'insert') between
+// checkpoint idx-1 and idx (0 when none).
+function enteredBefore(idx, kind) {
     const cp = ledger.checkpoints[idx];
     if (!cp) return 0;
     const from = idx > 0 ? ledger.checkpoints[idx - 1].op_index : 0;
-    return ledger.ops.slice(from, cp.op_index).filter(op => op.op === 'paste').reduce((s, op) => s + (op.len || 0), 0);
+    return ledger.ops.slice(from, cp.op_index).filter(op => op.op === kind).reduce((s, op) => s + (op.len || 0), 0);
 }
+function pastedBefore(idx) { return enteredBefore(idx, 'paste'); }
 
 function updateLedgerUI() {
     setText('ledger-count', ledger.checkpoints.length + ' blocks');
@@ -278,7 +288,7 @@ async function loadState() {
     passport.lastUsed = Date.now();
 
     const state = stored[DOC_KEY];
-    if (!state || state.version !== RECEIPT_VERSION) return false;
+    if (!state || !READABLE_VERSIONS.has(state.version)) return false;
     const ed = editorEl();
     ed.innerHTML = typeof state.html === 'string' ? state.html : '';
     const saved = state.ledger && typeof state.ledger === 'object' ? state.ledger : {};
@@ -308,6 +318,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         ed.addEventListener('keyup', handleKeyup);
         ed.addEventListener('paste', handlePaste);
         ed.addEventListener('input', handleInput);
+        ed.addEventListener('compositionstart', handleCompositionStart);
+        ed.addEventListener('compositionend', handleCompositionEnd);
         ed.addEventListener('click', () => {
             JitterBio.handleCursorMove(bioSession, getCursorOffset());
             updateDashboard();
@@ -351,6 +363,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // --- INPUT CAPTURE ---
 function handleKeydown(e) {
+    // A script-made key event inserts nothing, so it is never counted.
+    if (!e.isTrusted) return;
+    // While an input method composes, keys are its business: what it inserts
+    // is counted when the composition ends.
+    if (e.isComposing || e.keyCode === 229) { imeKeySeen = true; return; }
     if (NAV_KEYS.has(e.key)) {
         JitterBio.handleCursorMove(bioSession, getCursorOffset());
         return;
@@ -360,46 +377,128 @@ function handleKeydown(e) {
         JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
         return;
     }
-    if (e.ctrlKey || e.metaKey) return;
+    // AltGr (Ctrl+Alt on Windows) types characters such as @ or €; plain Ctrl/Cmd shortcuts don't.
+    const altGraph = typeof e.getModifierState === 'function' && e.getModifierState('AltGraph');
+    if ((e.ctrlKey || e.metaKey) && !altGraph) return;
     if (e.key === 'Enter' || e.key.length === 1) {
-        if (e.key.length === 1) JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
+        // Auto-repeat inserts characters but has no rhythm of its own.
+        if (e.key.length === 1 && !e.repeat) JitterBio.handleKeydown(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
         typedKey(Date.now());
+        pendingTyped++;
         updateDashboard();
     }
 }
 
 function handleKeyup(e) {
+    if (!e.isTrusted) return;
     JitterBio.handleKeyup(bioSession, e.key, e.ctrlKey, e.metaKey, e.altKey);
     JitterBio.handleCursorMove(bioSession, getCursorOffset());
 }
 
-// Deleted characters are measured, not guessed: the editor text length before
-// and after each input event. A deleted selection counts fully; a key typed
-// over a selection counts the selection as deleted.
+// Every change in the editor's text length is accounted for. Deleted
+// characters are measured, not guessed: the text length before and after each
+// input event (a deleted selection counts fully; a key typed over a selection
+// counts the selection as deleted). Inserted characters are explained by the
+// keystrokes or the paste that produced them; whatever they do not explain
+// (drag-and-drop, dictation, autocorrect, undo, a script) is recorded as an
+// `insert` op: its length and how it came in, never the text.
+function viaFor(inputType) {
+    if (inputType === 'insertFromDrop') return 'drop';
+    if (inputType === 'insertCompositionText' || inputType === 'insertFromComposition') return 'input-method';
+    if (inputType === 'insertReplacementText') return 'replacement';
+    if (inputType === 'historyUndo' || inputType === 'historyRedo') return 'undo';
+    return 'other';
+}
+
+function recordInsert(len, via) {
+    if (!(len > 0)) return;
+    recordOp({ op: 'insert', len: len, via: via }, { skipCheckpoint: true });
+    // A large insertion gets the checkpoint a paste gets, once it is in the document.
+    if (len >= INSERT_CHECKPOINT_MIN) setTimeout(() => { takeCheckpoint('insert'); updateDashboard(); }, 0);
+}
+
 function handleInput(e) {
     const cur = measureText();
     const delta = cur - doc.textLen;
     doc.textLen = cur;
+    // An input method's text is counted once, when the composition ends.
+    if (composing) { pendingTyped = 0; imeKeySeen = false; updateDashboard(); return; }
     const type = (e && e.inputType) || '';
+    const trusted = !!(e && e.isTrusted);
+    const fromPaste = type === 'insertFromPaste' || type === 'insertFromPasteAsQuotation';
     let removed = 0;
-    if (type === 'insertFromPaste') removed = pasteSelection;
+    if (fromPaste) removed = pasteSelection;
     else if (type === 'insertText') removed = Math.max(0, ((e.data || '').length) - delta);
-    else if (type === 'insertCompositionText' || type === 'deleteCompositionText' || type.startsWith('format')) removed = 0;
+    else if (type.startsWith('format')) removed = 0;
     else removed = Math.max(0, -delta); // delete*, insertParagraph, drop, undo/redo, replacement text
+    const added = Math.max(0, delta + removed);
+    let explained = 0;
+    if (trusted && fromPaste) explained = pendingPaste;
+    else if (trusted && (type === 'insertText' || type === 'insertParagraph' || type === 'insertLineBreak')) explained = pendingTyped;
+    // Phone keyboards often send their text as plain insertText behind an
+    // input-method key (keyCode 229) rather than as a composition.
+    const via = !trusted ? 'other' : (imeKeySeen && type === 'insertText') ? 'input-method' : viaFor(type);
     pasteSelection = 0;
+    pendingPaste = 0;
+    pendingTyped = 0;
+    imeKeySeen = false;
     if (removed > 0) recordOp({ op: 'delete', n: removed });
+    if (added > explained) recordInsert(added - explained, via);
     updateDashboard();
 }
 
+function handleCompositionStart(e) {
+    composing = { startLen: measureText(), selection: selectionLength() };
+}
+
+function handleCompositionEnd(e) {
+    if (!composing) return;
+    const c = composing;
+    composing = null;
+    const cur = measureText();
+    doc.textLen = cur;
+    pendingTyped = 0;
+    imeKeySeen = false;
+    const added = Math.max(0, cur - c.startLen + c.selection);
+    if (c.selection > 0) recordOp({ op: 'delete', n: c.selection });
+    recordInsert(added, 'input-method');
+    updateDashboard();
+}
+
+// Text can change without any input event (a script, devtools). Before the
+// record is closed, whatever length the events did not account for is
+// recorded, so the receipt never describes less than the document holds.
+function syncTextLength() {
+    if (composing) return;
+    const cur = measureText();
+    const delta = cur - doc.textLen;
+    if (delta === 0) return;
+    doc.textLen = cur;
+    // No deferred checkpoint here: the caller takes one right away.
+    if (delta > 0) recordOp({ op: 'insert', len: delta, via: 'other' }, { skipCheckpoint: true });
+    else recordOp({ op: 'delete', n: -delta }, { skipCheckpoint: true });
+}
+
+// The length of a paste's text: its plain text, or the text of its HTML when
+// the clipboard holds HTML only. Only the length is kept.
+function htmlTextLength(html) {
+    try { return (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').length; } catch (e) { return 0; }
+}
+
 function handlePaste(e) {
-    let text = '';
+    if (!e.isTrusted) return; // a script-made paste event pastes nothing
+    let len = 0;
     try {
-        if (e.clipboardData) text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text') || '';
-    } catch (err) { text = ''; }
-    if (!text.length) return; // files and images enter no text
+        if (e.clipboardData) {
+            const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text') || '';
+            len = text.length || htmlTextLength(e.clipboardData.getData('text/html') || '');
+        }
+    } catch (err) { len = 0; }
+    if (!len) return; // files and images enter no text
     pasteSelection = selectionLength();
-    JitterBio.handlePaste(bioSession, text.length);
-    recordOp({ op: 'paste', len: text.length }, { skipCheckpoint: true });
+    pendingPaste = len;
+    JitterBio.handlePaste(bioSession, len);
+    recordOp({ op: 'paste', len: len }, { skipCheckpoint: true });
     // The pasted text lands after this event's default action; the checkpoint
     // "after every paste" is taken once it is in the document.
     setTimeout(() => { takeCheckpoint('paste'); updateDashboard(); }, 0);
@@ -439,6 +538,7 @@ function updateDashboard() {
     setText('typed-count', fmt(c.typed + (run ? run.n : 0)));
     setText('pasted-count', fmt(c.pasted));
     setText('paste-events', c.pastes === 0 ? 'no pastes' : c.pastes === 1 ? '1 paste' : c.pastes + ' pastes');
+    setText('inserted-count', fmt(c.inserted));
     setText('deleted-count', fmt(c.deleted));
     setText('sittings-count', String(Math.max(1, JitterReceipt.sessionsFrom(ledger.ops).length)));
     updateActiveTime();
@@ -462,6 +562,10 @@ async function newDocument() {
     doc.textLen = 0;
     doc.lastCheckpointAt = 0;
     pasteSelection = 0;
+    pendingPaste = 0;
+    pendingTyped = 0;
+    composing = null;
+    imeKeySeen = false;
     lastReceipt = null;
     const dl = $('btn-download-receipt');
     if (dl) dl.disabled = true;
@@ -481,11 +585,13 @@ async function getReceipt() {
     if (!normalized.length) { flash('btn-export', 'TYPE SOMETHING FIRST'); return; }
 
     flushRun();
+    syncTextLength();
     await takeCheckpoint('mint');
     const now = Date.now();
 
     const profile = JitterBio.getProfile(bioSession);
     const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    const typing = JitterBio.documentTyping(bioSession);
     const war = warResult && typeof warResult.war === 'number' && isFinite(warResult.war) ? warResult.war : 0;
     const totalEdits = (bioSession.humanChars || 0) + (bioSession.backwardEdits || 0);
     const linearity = profile && typeof profile.editing_linearity === 'number' ? profile.editing_linearity
@@ -522,11 +628,14 @@ async function getReceipt() {
         war: war,
         war_uncapped: war,
         process: process,
+        // Whole-document statistics; cognitive_ratio = mean pause after a space or
+        // punctuation / mean pause within a word (null when too few samples).
         typing: {
-            mean_dwell: profile ? profile.mean_dwell : null,
-            std_dwell: profile ? profile.std_dwell : null,
-            mean_flight: profile ? profile.mean_inter_key : null,
-            std_flight: profile ? profile.std_inter_key : null,
+            mean_dwell: typing.mean_dwell,
+            std_dwell: typing.std_dwell,
+            mean_flight: typing.mean_flight,
+            std_flight: typing.std_flight,
+            cognitive_ratio: typing.cognitive_ratio,
             keys: process.typed_chars,
         },
         ledger: { hash: ledger.hash, checkpoints: ledger.checkpoints.length, ops: ledger.ops.length },
@@ -564,7 +673,7 @@ async function getReceipt() {
 
     const code = verifyHref || `#jitter:${base64}`;
     const htmlBadge = `<a href="${code}" style="text-decoration:none;" data-jitter-payload="${base64}"><span style="background:#00F0FF11;color:#00F0FF;border:1px solid #00F0FF;padding:2px 6px;font-size:10px;font-family:monospace;border-radius:4px;">⚡ JITTER RECEIPT 0x${blockID}</span></a>`;
-    const plainBadge = `\n\n[ JITTER RECEIPT 0x${blockID} | typed ${JitterReceipt.percent(process.typed_share, process.pasted_chars)} | ${process.sessions.length} sitting${process.sessions.length === 1 ? '' : 's'} ]\n${code}`;
+    const plainBadge = `\n\n[ JITTER RECEIPT 0x${blockID} | typed ${JitterReceipt.percent(process.typed_share, process.pasted_chars + process.inserted_chars)} | ${process.sessions.length} sitting${process.sessions.length === 1 ? '' : 's'} ]\n${code}`;
 
     try {
         const data = [new ClipboardItem({ 'text/html': new Blob([htmlBadge], { type: 'text/html' }), 'text/plain': new Blob([plainBadge], { type: 'text/plain' }) })];
@@ -585,6 +694,7 @@ function downloadReceipt() {
 // --- LEDGER FILE (the student's, shared only for a replay) ---
 async function exportLedger() {
     flushRun();
+    syncTextLength();
     const last = ledger.checkpoints[ledger.checkpoints.length - 1];
     if (!last || last.op_index !== ledger.ops.length || last.content !== editorText()) await takeCheckpoint('export');
     else await checkpointQueue;
@@ -654,6 +764,12 @@ function renderReplay(checkpointIdx) {
     if (replayPaste) {
         replayPaste.innerText = pasted > 0 ? `📋 PASTE OF ${fmt(pasted)} CHARACTERS IN THIS BLOCK` : '';
         replayPaste.style.display = pasted > 0 ? 'block' : 'none';
+    }
+    const inserted = enteredBefore(idx, 'insert');
+    const replayInsert = $('replay-insert-indicator');
+    if (replayInsert) {
+        replayInsert.innerText = inserted > 0 ? `${fmt(inserted)} CHARACTERS ENTERED ANOTHER WAY IN THIS BLOCK` : '';
+        replayInsert.style.display = inserted > 0 ? 'block' : 'none';
     }
 
     // Time away between this checkpoint and the next

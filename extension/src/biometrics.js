@@ -105,7 +105,31 @@ function createSession() {
     lastKeyChar: '',
     keyDownTimes: {},
     sessionStartTime: Date.now(),
+    // Whole-session running totals (the arrays above keep only the latest
+    // samples). Read by documentTyping() for the Writer's receipt.
+    totals: emptyTotals(),
   };
+}
+
+function emptyTotals() {
+  return {
+    flight: { n: 0, mean: 0, m2: 0 },  // Welford mean/variance, same window as flightTimes
+    dwell: { n: 0, mean: 0, m2: 0 },   // same window as dwellTimes
+    flow: { n: 0, sum: 0 },            // Loki: within a word
+    gap: { n: 0, sum: 0 },             // Loki: after a space or punctuation
+  };
+}
+
+function addSample(acc, x) {
+  acc.n++;
+  const d = x - acc.mean;
+  acc.mean += d / acc.n;
+  acc.m2 += d * (x - acc.mean);
+}
+
+function sessionTotals(session) {
+  if (!session.totals || typeof session.totals !== 'object') session.totals = emptyTotals();
+  return session.totals;
 }
 
 // --- KEYDOWN HANDLER ---
@@ -148,6 +172,7 @@ function handleKeydown(session, key, ctrlKey, metaKey, altKey) {
     if (rawFlight >= MIN_FLIGHT_MS && rawFlight <= MAX_FLIGHT_MS) {
       session.flightTimes.push(rawFlight);
       if (session.flightTimes.length > MAX_FLIGHT_TIMES) session.flightTimes.shift();
+      addSample(sessionTotals(session).flight, rawFlight);
 
       // Bigram timing
       if (session.lastKeyChar) {
@@ -169,12 +194,17 @@ function handleKeydown(session, key, ctrlKey, metaKey, altKey) {
     // Loki flow/gap distinction
     const isGap = /[\s\.\,\;\:\!\?]/.test(session.lastKeyChar);
     if (rawFlight < 2000) {
+      const totals = sessionTotals(session);
       if (isGap) {
         session.gapIntervals.push(rawFlight);
         if (session.gapIntervals.length > 20) session.gapIntervals.shift();
+        totals.gap.n++;
+        totals.gap.sum += rawFlight;
       } else {
         session.flowIntervals.push(rawFlight);
         if (session.flowIntervals.length > 50) session.flowIntervals.shift();
+        totals.flow.n++;
+        totals.flow.sum += rawFlight;
       }
     }
 
@@ -214,6 +244,7 @@ function handleKeyup(session, key, ctrlKey, metaKey, altKey) {
     if (dwell >= MIN_DWELL_MS && dwell <= MAX_DWELL_MS) {
       session.dwellTimes.push(dwell);
       if (session.dwellTimes.length > MAX_DWELL_TIMES) session.dwellTimes.shift();
+      addSample(sessionTotals(session).dwell, dwell);
 
       if (TRACKED_KEYS.includes(keyLower)) {
         if (!session.perKeyDwells[keyLower]) session.perKeyDwells[keyLower] = [];
@@ -427,6 +458,31 @@ function getProfile(session) {
   };
 }
 
+// --- WHOLE-SESSION TYPING STATISTICS (the Writer's receipt) ---
+// Mean and spread of dwell and flight over every timed keystroke of the
+// session, and the cognitive ratio: mean interval after a space or
+// punctuation divided by mean interval within a word. getProfile() and the
+// WAR engine look at the latest samples only; the receipt describes the whole
+// document. null wherever there are too few samples to say anything.
+const MIN_TIMED = 10;
+const MIN_GAPS = 3;
+function documentTyping(session) {
+  const t = session && session.totals && typeof session.totals === 'object' ? session.totals : emptyTotals();
+  const acc = a => (a && isFinite(a.n) && a.n > 0 ? a : { n: 0, mean: 0, m2: 0, sum: 0 });
+  const flight = acc(t.flight), dwell = acc(t.dwell), flow = acc(t.flow), gap = acc(t.gap);
+  const std = a => (a.n > 1 ? Math.sqrt(Math.max(0, a.m2) / a.n) : null); // population std, as the engine uses
+  const flowMean = flow.n >= MIN_TIMED && flow.sum > 0 ? flow.sum / flow.n : null;
+  const gapMean = gap.n >= MIN_GAPS ? gap.sum / gap.n : null;
+  return {
+    mean_dwell: dwell.n >= MIN_TIMED ? round2(dwell.mean) : null,
+    std_dwell: dwell.n >= MIN_TIMED ? round2(std(dwell)) : null,
+    mean_flight: flight.n >= MIN_TIMED ? round2(flight.mean) : null,
+    std_flight: flight.n >= MIN_TIMED ? round2(std(flight)) : null,
+    cognitive_ratio: flowMean != null && gapMean != null ? round2(gapMean / flowMean) : null,
+    timed_keys: flight.n,
+  };
+}
+
 // --- PURITY ---
 function getPurity(session) {
   const total = session.humanChars + session.alienChars;
@@ -466,7 +522,7 @@ function computeMousePath(positions) {
 // --- EXPORTS ---
 const _exports = {
   createSession, handleKeydown, handleKeyup, handlePaste,
-  handleMouseMove, handleCursorMove, analyzeLoki, getProfile,
+  handleMouseMove, handleCursorMove, analyzeLoki, getProfile, documentTyping,
   getPurity, scoreWAR, applyTimeCap, scoreCrossSignal,
   // Engine tables and helpers, re-exported from war-score.js (not copies)
   ksStatistic: WarEngine.ksStatistic, pearsonR: WarEngine.pearsonR,

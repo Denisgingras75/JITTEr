@@ -308,6 +308,95 @@ function allStrings(v, out) {
   console.log(`INFO: a 3-hour, 3-sitting 5 000-character receipt is ${slowSize} bytes with ${slowReceipt.process.timeline.buckets.length} timeline buckets`);
   assert(slowSize < 16384, `A 3-hour 5 000-character receipt stays under 16 KB (${slowSize} bytes)`);
 
+  // --- v4.1: TEXT ENTERED ANOTHER WAY ---
+  console.log('\n=== v4.1: text entered without counted keystrokes or a paste (insert ops) ===');
+  const ops6 = [
+    at(0, { op: 'session', k: 1 }),
+    at(2 * SEC, { op: 'type', n: 200, ms: 30 * SEC }),
+    at(40 * SEC, { op: 'insert', len: 1500, via: 'drop' }),
+    at(50 * SEC, { op: 'type', n: 100, ms: 15 * SEC }),
+    at(70 * SEC, { op: 'insert', len: 12, via: 'input-method' }),
+    at(80 * SEC, { op: 'paste', len: 40 }),
+    at(90 * SEC, { op: 'insert', len: 8, via: 'something-new' }),
+    at(95 * SEC, { op: 'delete', n: 20 }),
+  ];
+  const c6 = R.countOps(ops6);
+  assert(c6.inserted === 1520 && c6.inserted_by.drop === 1500 && c6.inserted_by['input-method'] === 12 && c6.inserted_by.other === 8,
+    `countOps(): inserted ${c6.inserted}, by ${JSON.stringify(c6.inserted_by)} (an unknown via counts as other)`);
+  assert(c6.typed === 300 && c6.pasted === 40 && c6.deleted === 20, 'Inserts never count as typed, pasted or deleted');
+  const pr6 = R.buildProcess(ops6, { finishedAt: T0 + 2 * MIN });
+  assert(pr6.inserted_chars === 1520 && pr6.inserted_by.drop === 1500, `buildProcess(): inserted_chars ${pr6.inserted_chars}, inserted_by carried`);
+  assert(pr6.typed_share === Math.round((300 / (300 + 40 + 1520)) * 100) / 100, `typed_share = typed / (typed + pasted + entered another way) = ${pr6.typed_share}`);
+  assert(pr6.sessions[0].inserted === 1520 && pr6.timeline.buckets.reduce((s, b) => s + b.inserted, 0) === 1520, 'Sittings and timeline buckets carry the inserted count');
+  assert(JSON.stringify(pr6).indexOf('"text"') < 0 && JSON.stringify(pr6).indexOf('"content"') < 0, 'An insert carries a length and a via, never text');
+  assert(R.buildProcess(ops5, { finishedAt: finished }).inserted_chars === 0, 'No insert ops: inserted_chars 0');
+
+  const r41 = Object.assign({}, receipt, { version: '4.1', process: pr6, chars: 1800,
+    typing: { mean_dwell: 91.2, std_dwell: 24.1, mean_flight: 214.5, std_flight: 96.3, cognitive_ratio: 2.41, keys: 300 } });
+  const v41 = R.describeReceipt(r41);
+  assert(v41.kind === 'receipt' && v41.version === '4.1' && v41.counts.inserted === 1520 && v41.typing.cognitive_ratio === 2.41, 'A 4.1 receipt is described as a receipt with its inserted count and cognitive ratio');
+  const s41 = R.summarize(r41);
+  assert(s41.headline.indexOf('300 characters typed, 40 pasted in 1 paste, 1,520 entered another way, 20 deleted') > 0, `4.1 headline names what was entered another way: ${s41.headline}`);
+  assert(s41.share === '16% of what was entered was typed here', `Share counts everything entered: ${s41.share}`);
+  assert(s41.other === '1,520 characters entered without counted keystrokes or a paste: drag-and-drop 1,500 · input method (phone keyboard, language input, accent key, dictation) 12 · other (dictation, autofill or a script; no keystroke or paste accounts for it) 8',
+    `Other-entry line breaks it down: ${s41.other}`);
+  assert(/^Sitting 1 · .* 300 typed, 40 pasted, 1,520 entered another way, 20 deleted$/.test(s41.sessions[0]), `Sitting line: ${s41.sessions[0]}`);
+  assert(s41.rhythm.indexOf('pause ratio 2.41 (between words ÷ within words)') > 0, `Rhythm line carries the cognitive ratio: ${s41.rhythm}`);
+  assert((R.timelineSvg(pr6).match(/class="tl-inserted"/g) || []).length === pr6.timeline.buckets.filter(b => b.inserted > 0).length, 'The timeline stacks an entered-another-way bar');
+
+  const clean41 = R.summarize(Object.assign({}, r41, { process: R.buildProcess(ops5, { finishedAt: finished }) }));
+  assert(clean41.other === 'No text entered without counted keystrokes or a paste.' && clean41.headline.indexOf('entered another way') < 0,
+    `4.1 with nothing entered another way says so, and the headline stays the spec sentence: ${clean41.other}`);
+  const pr40 = Object.assign({}, pr);           // a 4.0 process block has no inserted_* fields
+  delete pr40.inserted_chars; delete pr40.inserted_by;
+  const receipt40 = Object.assign({}, receipt, { process: pr40 });
+  const old40 = R.summarize(receipt40);
+  assert(R.describeReceipt(receipt40).process.inserted_chars === null && /^This receipt version \(4\.0\) does not record/.test(old40.other),
+    `A 4.0 receipt says it does not record other entry (null, not 0): ${old40.other}`);
+  assert(R.percent(0.999, 0 + 4) === '99%', 'percent(): never 100% while something was entered another way');
+  assert(R.describeReceipt({ version: '4.2', process: {} }).kind === 'receipt' && R.describeReceipt({ version: '40', process: {} }).kind === 'badge',
+    'Any 4.x version reads as a receipt; other versions do not');
+
+  const file41 = await makeLedger(['', 'Hello', 'Hello world'], [0, 3, 7]);
+  file41.ops[5] = at(50 * SEC, { op: 'insert', len: 4, via: 'drop' });
+  assert(JSON.stringify(R.insertCheckpoints(file41)) === '[0,0,4]' && JSON.stringify(R.pasteCheckpoints(file41)) === '[0,6,0]',
+    `insertCheckpoints(): characters entered another way before each block ${JSON.stringify(R.insertCheckpoints(file41))}`);
+
+  const strings41 = allStrings(s41).concat(allStrings(clean41), [old40.other, R.timelineSvg(pr6)], Object.values(R.INSERT_VIA));
+  const hits41 = strings41.map(forbiddenIn).filter(Boolean);
+  assert(hits41.length === 0, `No forbidden word in the v4.1 wording (${hits41.length ? 'found: ' + hits41.join(', ') : 'none'})`);
+
+  // --- WHOLE-DOCUMENT TYPING STATISTICS (capture) ---
+  console.log('\n=== documentTyping(): whole-session dwell, flight and cognitive ratio ===');
+  let clock = 1000;
+  performance.now = () => clock;
+  const bio = require('../extension/src/biometrics.js');
+  const sess = bio.createSession();
+  // 400 words: within a word 100 ms between keys, after a space 300 ms; every key held 80 ms (90 ms for vowels)
+  const words = 'when the writer pauses between words the ratio of those pauses to the pauses inside a word is the cognitive ratio'.split(' ');
+  for (let w = 0; w < 400; w++) {
+    const word = words[w % words.length] + ' ';
+    for (let i = 0; i < word.length; i++) {
+      const prev = i === 0 ? ' ' : word[i - 1];
+      clock += prev === ' ' ? 300 : 100;
+      bio.handleKeydown(sess, word[i], false, false, false);
+      clock += /[aeiou]/.test(word[i]) ? 90 : 80;
+      bio.handleKeyup(sess, word[i], false, false, false);
+      clock -= /[aeiou]/.test(word[i]) ? 90 : 80; // keep keydown-to-keydown at 100 / 300 ms
+    }
+  }
+  const doc = bio.documentTyping(sess);
+  assert(near(doc.cognitive_ratio, 3, 0.01), `Cognitive ratio over the whole document is 300 / 100 = ${doc.cognitive_ratio}`);
+  assert(doc.timed_keys > 2000 && sess.flightTimes.length === 100 && sess.gapIntervals.length === 20,
+    `Every timed keystroke counts (${doc.timed_keys}), not just the latest 100 the engine keeps`);
+  assert(doc.mean_dwell > 80 && doc.mean_dwell < 90 && doc.std_dwell > 0 && doc.mean_flight > 100 && doc.mean_flight < 300 && doc.std_flight > 0,
+    `Whole-session dwell ${doc.mean_dwell} ± ${doc.std_dwell} ms, flight ${doc.mean_flight} ± ${doc.std_flight} ms`);
+  const few = bio.createSession();
+  for (let i = 0; i < 5; i++) { clock += 100; bio.handleKeydown(few, 'a', false, false, false); clock += 80; bio.handleKeyup(few, 'a', false, false, false); }
+  const fewDoc = bio.documentTyping(few);
+  assert(fewDoc.cognitive_ratio === null && fewDoc.mean_dwell === null && fewDoc.mean_flight === null, 'Too few samples: nulls, never a made-up number');
+  assert(bio.documentTyping({}).cognitive_ratio === null && bio.documentTyping(null).timed_keys === 0, 'A session saved before v4.1 (no totals) reads as no data, without throwing');
+
   console.log(`\n${passed} passed, ${failed} failed`);
   console.log('Done.');
 })().catch(e => { console.error('FAIL:', e); process.exitCode = 1; });

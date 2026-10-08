@@ -1,5 +1,5 @@
 /**
- * verify-page.js - JITTEr receipt check (process receipt v4.0)
+ * verify-page.js - JITTEr receipt check (process receipt v4.1, reads 4.0 and v3 badges)
  *
  * The teacher's page: checks a process receipt (or an older v3 badge) against
  * the essay and, optionally, the student's ledger file, then describes what
@@ -27,7 +27,7 @@ function escapeDeep(v) {
 }
 
 const R = JitterReceipt;
-let ledgerReplay = null; // { checkpoints, pasteBefore, originMs } for the scrubber
+let ledgerReplay = null; // { checkpoints, pasteBefore, insertBefore, originMs } for the scrubber
 
 // --- input decoding ---
 function extractBadgeData(input) {
@@ -104,9 +104,10 @@ async function checkLedgerFile(view) {
     if (view.process && match !== 'no') {
         const upTo = match === 'final' ? ops.length : Math.min(ops.length, Number(checkpoints[matchIndex].op_index) || 0);
         const c = R.countOps(ops.slice(0, upTo));
-        countsMatch = c.typed === view.process.typed_chars && c.pasted === view.process.pasted_chars && c.deleted === view.process.deleted_chars;
+        countsMatch = c.typed === view.process.typed_chars && c.pasted === view.process.pasted_chars && c.deleted === view.process.deleted_chars
+            && (view.process.inserted_chars == null || c.inserted === view.process.inserted_chars);
     }
-    return { file: parsed, chain, match, matchIndex, countsMatch, checkpoints, ops, pasteBefore: R.pasteCheckpoints(parsed) };
+    return { file: parsed, chain, match, matchIndex, countsMatch, checkpoints, ops, pasteBefore: R.pasteCheckpoints(parsed), insertBefore: R.insertCheckpoints(parsed) };
 }
 
 // --- rendering ---
@@ -158,7 +159,8 @@ function renderTimelineSection(view) {
         return card(3, 'Timeline', '<p class="quiet">No timeline: this receipt carries no process record.</p>');
     }
     const svg = R.timelineSvg(view.process);
-    const legend = '<div class="legend"><span class="typed">typed</span><span class="pasted">pasted</span><span class="deleted">deleted</span><span class="paste-mark">paste event</span><span class="sitting">new sitting</span></div>';
+    const other = view.process.inserted_chars != null ? '<span class="inserted">entered another way</span>' : '';
+    const legend = '<div class="legend"><span class="typed">typed</span><span class="pasted">pasted</span>' + other + '<span class="deleted">deleted</span><span class="paste-mark">paste event</span><span class="sitting">new sitting</span></div>';
     return card(3, 'Timeline', `<div class="timeline-wrap">${svg}${legend}</div>`);
 }
 
@@ -167,7 +169,8 @@ function renderPastesSection(view, summary) {
         const c = view.counts || {};
         return card(4, 'Pastes', `<p class="quiet">${c.pastes != null ? escapeHtml(R.plural(c.pastes, 'paste')) + (c.pasted != null ? ', ' + escapeHtml(R.formatNumber(c.pasted)) + ' characters' : '') : 'No paste record'} (an older badge carries no per-paste detail).</p>`);
     }
-    return card(4, 'Pastes', summary.pastes.length ? list(summary.pastes) : '<p class="quiet">No pastes recorded.</p>');
+    return card(4, 'Pastes', (summary.pastes.length ? list(summary.pastes) : '<p class="quiet">No pastes recorded.</p>')
+        + `<p class="quiet other-entry" style="margin:10px 0 0 0;">${summary.other}</p>`);
 }
 
 function renderRevisionSection(view, summary) {
@@ -189,6 +192,7 @@ function renderRhythmSection(view, summary) {
         row('Key hold (dwell)', ms(t.mean_dwell, t.std_dwell))
         + row('Between keys (flight)', ms(t.mean_flight, t.std_flight))
         + row('Timed keystrokes', dash(t.keys != null ? R.formatNumber(t.keys) : null))
+        + row('Pause ratio (cognitive ratio)', t.cognitive_ratio != null ? t.cognitive_ratio.toFixed(2) + ' — mean pause after a space or punctuation ÷ mean pause within a word' : '—')
         + row('Rhythm score', (view.rhythm != null ? view.rhythm.toFixed(2) : '—') + ' — ' + R.RHYTHM_LABEL)
         + `<p class="quiet" style="margin:10px 0 0 0;">${summary.rhythm}</p>`);
 }
@@ -219,6 +223,7 @@ function renderLedgerSection(view, ledger) {
                 <span id="ledger-replay-label"></span>
             </div>
             <div id="ledger-replay-paste">${pill('warn', 'paste in this block')} <span class="quiet" id="ledger-replay-paste-text"></span></div>
+            <div id="ledger-replay-insert">${pill('warn', 'entered another way in this block')} <span class="quiet" id="ledger-replay-insert-text"></span></div>
             <div id="ledger-replay-content"></div>
         </div>` : '';
     return card(7, 'Ledger', chain + match + counts + replay);
@@ -239,9 +244,12 @@ function renderLedgerReplay(idx) {
     const pasteBox = document.getElementById('ledger-replay-paste');
     const pasteText = document.getElementById('ledger-replay-paste-text');
     const pasted = ledgerReplay.pasteBefore[idx] || 0;
+    const inserted = (ledgerReplay.insertBefore && ledgerReplay.insertBefore[idx]) || 0;
+    const insertBox = document.getElementById('ledger-replay-insert');
+    const insertText = document.getElementById('ledger-replay-insert-text');
     if (content) {
         content.textContent = typeof cp.content === 'string' ? cp.content : '(this block holds no content snapshot)';
-        content.classList.toggle('pasted', pasted > 0);
+        content.classList.toggle('pasted', pasted > 0 || inserted > 0);
     }
     if (label) {
         const t = R.toMs(cp.t);
@@ -250,6 +258,8 @@ function renderLedgerReplay(idx) {
     }
     if (pasteBox) pasteBox.style.display = pasted > 0 ? 'block' : 'none';
     if (pasteText) pasteText.textContent = pasted > 0 ? 'This block follows a paste of ' + R.plural(pasted, 'character') + '.' : '';
+    if (insertBox) insertBox.style.display = inserted > 0 ? 'block' : 'none';
+    if (insertText) insertText.textContent = inserted > 0 ? 'This block follows ' + R.plural(inserted, 'character') + ' entered without counted keystrokes or a paste.' : '';
 }
 
 async function verifyReceipt() {
@@ -297,6 +307,7 @@ async function verifyReceipt() {
             ledgerReplay = {
                 checkpoints: ledger.checkpoints,
                 pasteBefore: ledger.pasteBefore,
+                insertBefore: ledger.insertBefore,
                 originMs: isFinite(firstOp) ? firstOp : R.toMs(ledger.checkpoints[0] && ledger.checkpoints[0].t),
             };
             const scrubber = document.getElementById('ledger-scrubber');

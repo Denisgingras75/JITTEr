@@ -55,6 +55,7 @@
         .sub { font-size: 10px; color: #777; margin-top: 3px; }
         .typed { color: #00F0FF; }
         .pasted { color: #FFD700; }
+        .inserted { color: #FF8A5C; }
         .deleted { color: #9A8CFF; }
         .ledger-hash {
             font-family: 'Courier New', monospace;
@@ -178,6 +179,16 @@
             font-size: 11px;
             font-family: 'Courier New', monospace;
         }
+        #replay-insert-indicator {
+            display: none;
+            background: #FF8A5C22;
+            border: 1px solid #FF8A5C;
+            color: #FF8A5C;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+        }
         #replay-blur-indicator {
             display: none;
             background: #9A8CFF11;
@@ -271,11 +282,16 @@
                 <div class="sub" id="paste-events">no pastes</div>
             </div>
             <div class="stat-box">
+                <div class="label">Entered another way</div>
+                <div class="value inserted" id="inserted-count">0</div>
+                <div class="sub">drag-and-drop, dictation, input methods</div>
+            </div>
+            <div class="stat-box">
                 <div class="label">Deleted</div>
                 <div class="value deleted" id="deleted-count">0</div>
                 <div class="sub">characters</div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box wide">
                 <div class="label">Active writing</div>
                 <div class="value small" id="active-time">0 s</div>
             </div>
@@ -298,6 +314,7 @@
             <button class="btn" id="btn-new-doc">NEW DOCUMENT</button>
             <div class="note">
                 The receipt records how this text was entered: typed, pasted and deleted characters,
+                text that came in another way (drag-and-drop, dictation, input methods),
                 sittings, active writing time and typing rhythm. It never records the characters themselves.
                 The document autosaves on this device.
             </div>
@@ -335,6 +352,7 @@
             <span id="replay-title">⚡ WRITING LEDGER — REPLAY</span>
             <span id="replay-time">T+0:00</span>
             <span id="replay-paste-indicator">📋 PASTE IN THIS BLOCK</span>
+            <span id="replay-insert-indicator"></span>
             <span id="replay-blur-indicator"></span>
             <button id="replay-close-btn">✕ CLOSE</button>
         </div>

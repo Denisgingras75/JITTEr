@@ -61,7 +61,7 @@ test.describe('Process receipt', () => {
     const receipt = await readReceipt(page);
     const p = receipt.payload;
 
-    expect(p.version).toBe('4.0');
+    expect(p.version).toBe('4.1');
     expect(p.type).toBe('process-receipt');
     expect(p.url).toBe('jitter://writer');
     expect(p.minted_at).toMatch(ISO);
@@ -76,6 +76,9 @@ test.describe('Process receipt', () => {
     expect(p.process.deleted_chars).toBeGreaterThanOrEqual(BACKSPACES);
     expect(p.process.deleted_chars).toBe(BACKSPACES);
     expect(p.process.typed_share).toBe(TYPED_SHARE);
+    // Keystrokes and the paste explain every character: nothing entered another way
+    expect(p.process.inserted_chars).toBe(0);
+    expect(p.process.inserted_by).toEqual({});
 
     // Sittings and active time
     expect(p.process.started_at).toMatch(ISO);
@@ -100,7 +103,8 @@ test.describe('Process receipt', () => {
     expect(p.process.revision.backspaces).toBeGreaterThanOrEqual(BACKSPACES);
     expect(p.process.revision.editing_linearity).toBeGreaterThanOrEqual(0);
     expect(p.process.revision.editing_linearity).toBeLessThanOrEqual(1);
-    expect(Object.keys(p.typing).sort()).toEqual(['keys', 'mean_dwell', 'mean_flight', 'std_dwell', 'std_flight']);
+    expect(Object.keys(p.typing).sort()).toEqual(['cognitive_ratio', 'keys', 'mean_dwell', 'mean_flight', 'std_dwell', 'std_flight']);
+    expect(typeof p.typing.cognitive_ratio).toBe('number'); // pause after a space or punctuation / pause within a word
     expect(p.typing.keys).toBe(TYPED);
     expect(p.war).toBeGreaterThanOrEqual(0);
     expect(p.war).toBeLessThanOrEqual(1);
@@ -159,7 +163,7 @@ test.describe('Process receipt', () => {
     await waitForAutosave(page, text.length);
 
     const saved = (await readStorage(page)).writerDoc;
-    expect(saved.version).toBe('4.0');
+    expect(saved.version).toBe('4.1');
     expect(saved.html).toContain('Written in the first sitting');
     expect(saved.sessionCount).toBe(1);
     const savedOps = saved.ledger.ops;

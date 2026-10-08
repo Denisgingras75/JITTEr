@@ -1,7 +1,7 @@
 # JITTEr — Project Context for Claude
 
 ## What This Is
-A **process receipt for written work**. The JITTEr Writer records how a text was entered (typed / pasted / deleted, sittings, active time, typing rhythm), signs the record with a device key and binds it to the final text. A teacher verifies the receipt and the essay on the verify page and can replay the composition from the student's ledger.
+A **process receipt for written work**. The JITTEr Writer records how a text was entered (typed / pasted / entered another way / deleted, sittings, active time, typing rhythm), signs the record with a device key and binds it to the final text. A teacher verifies the receipt and the essay on the verify page and can replay the composition from the student's ledger.
 
 It proves *process* and *integrity*. It does not prove *who* typed, and it is not an AI detector. The classroom supplies identity; JITTEr supplies the record.
 

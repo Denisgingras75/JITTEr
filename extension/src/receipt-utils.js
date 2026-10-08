@@ -1,5 +1,5 @@
 /**
- * receipt-utils.js — Process receipt and ledger helpers (v4.0)
+ * receipt-utils.js — Process receipt and ledger helpers (v4.1)
  *
  * Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
  *
@@ -22,13 +22,16 @@
  *   { op: 'type',    t, n, ms }   a run of n keystrokes lasting ms
  *   { op: 'delete',  t, n }       n characters removed
  *   { op: 'paste',   t, len }     a paste of len characters
+ *   { op: 'insert',  t, len, via } len characters that entered without counted
+ *                                  keystrokes or a paste (v4.1); via is one of
+ *                                  INSERT_VIA's keys, never the text
  *   { op: 'blur', t } / { op: 'focus', t }
  *   { op: 'session', t, k }       start of sitting k
  */
 const JitterReceipt = (function () {
   'use strict';
 
-  const VERSION = '4.0';
+  const VERSION = '4.1';
   const RUN_PAUSE_MS = 2000;            // a typing run ends at a pause over this
   const RUN_MAX_KEYS = 50;              // ...or at this many keys
   const SESSION_GAP_MS = 10 * 60000;    // a gap over this starts a new sitting
@@ -54,7 +57,18 @@ const JitterReceipt = (function () {
 
   const RHYTHM_LABEL = 'one statistic, not a verdict';
 
-  const COLORS = { typed: '#00F0FF', pasted: '#FFD700', deleted: '#9A8CFF' };
+  const COLORS = { typed: '#00F0FF', pasted: '#FFD700', inserted: '#FF8A5C', deleted: '#9A8CFF' };
+
+  // How text entered without counted keystrokes or a paste (the `via` of an
+  // `insert` op), with the words the verify page uses for each.
+  const INSERT_VIA = {
+    drop: 'drag-and-drop',
+    'input-method': 'input method (phone keyboard, language input, accent key, dictation)',
+    replacement: 'spelling or autocorrect replacement',
+    undo: 'undo / redo',
+    other: 'other (dictation, autofill or a script; no keystroke or paste accounts for it)',
+  };
+  function viaKey(v) { return typeof v === 'string' && Object.prototype.hasOwnProperty.call(INSERT_VIA, v) ? v : 'other'; }
 
   // --- small helpers ---
   function toMs(t) {
@@ -114,10 +128,15 @@ const JitterReceipt = (function () {
   }
 
   function countOps(ops) {
-    const s = { typed: 0, pasted: 0, pastes: 0, deleted: 0 };
+    const s = { typed: 0, pasted: 0, pastes: 0, inserted: 0, inserted_by: {}, deleted: 0 };
     for (const op of cleanOps(ops)) {
       if (op.op === 'type') s.typed += count(op.n);
       else if (op.op === 'paste') { s.pasted += count(op.len); s.pastes++; }
+      else if (op.op === 'insert') {
+        const n = count(op.len), via = viaKey(op.via);
+        s.inserted += n;
+        if (n > 0) s.inserted_by[via] = (s.inserted_by[via] || 0) + n;
+      }
       else if (op.op === 'delete') s.deleted += count(op.n);
     }
     return s;
@@ -126,7 +145,7 @@ const JitterReceipt = (function () {
   function sessionsFrom(ops) {
     return segment(cleanOps(ops)).map(s => {
       const c = countOps(s.ops);
-      return { start: iso(s.start), end: iso(s.end), active_ms: activeWithin(s.ops), typed: c.typed, pasted: c.pasted, deleted: c.deleted };
+      return { start: iso(s.start), end: iso(s.end), active_ms: activeWithin(s.ops), typed: c.typed, pasted: c.pasted, inserted: c.inserted, deleted: c.deleted };
     });
   }
 
@@ -153,14 +172,15 @@ const JitterReceipt = (function () {
     const bucket_ms = bucketMsFor(end - start);
     const byIndex = new Map();
     for (const op of clean) {
-      if (op.op !== 'type' && op.op !== 'paste' && op.op !== 'delete') continue;
+      if (op.op !== 'type' && op.op !== 'paste' && op.op !== 'insert' && op.op !== 'delete') continue;
       let i = Math.floor((toMs(op.t) - start) / bucket_ms);
       if (!(i >= 0)) i = 0;
       if (i > MAX_BUCKETS - 1) i = MAX_BUCKETS - 1;
       let b = byIndex.get(i);
-      if (!b) { b = { i, typed: 0, pasted: 0, deleted: 0 }; byIndex.set(i, b); }
+      if (!b) { b = { i, typed: 0, pasted: 0, inserted: 0, deleted: 0 }; byIndex.set(i, b); }
       if (op.op === 'type') b.typed += count(op.n);
       else if (op.op === 'paste') b.pasted += count(op.len);
+      else if (op.op === 'insert') b.inserted += count(op.len);
       else b.deleted += count(op.n);
     }
     const buckets = Array.from(byIndex.values()).sort((a, b) => a.i - b.i);
@@ -192,7 +212,7 @@ const JitterReceipt = (function () {
     const started = clean.length ? toMs(clean[0].t) : finished;
     const sessions = sessionsFrom(clean);
     const c = countOps(clean);
-    const entered = c.typed + c.pasted;
+    const entered = c.typed + c.pasted + c.inserted;
     const rev = opts.revision && typeof opts.revision === 'object' ? opts.revision : {};
     const linearity = num(rev.editing_linearity);
     return {
@@ -202,6 +222,8 @@ const JitterReceipt = (function () {
       active_ms: sessions.reduce((sum, s) => sum + s.active_ms, 0),
       typed_chars: c.typed,
       pasted_chars: c.pasted,
+      inserted_chars: c.inserted,
+      inserted_by: c.inserted_by,
       deleted_chars: c.deleted,
       typed_share: entered > 0 ? round2(c.typed / entered) : null,
       paste_events: clean.filter(op => op.op === 'paste').map(op => ({ t: iso(toMs(op.t)), len: count(op.len) })),
@@ -274,6 +296,20 @@ const JitterReceipt = (function () {
     return out; // characters pasted between checkpoint i-1 and i (0 when none)
   }
 
+  // Same, for text entered another way (op 'insert', v4.1).
+  function insertCheckpoints(file) {
+    const cps = file && Array.isArray(file.checkpoints) ? file.checkpoints : [];
+    const ops = file && Array.isArray(file.ops) ? file.ops : [];
+    const out = [];
+    let from = 0;
+    for (let i = 0; i < cps.length; i++) {
+      const to = Math.min(ops.length, Math.max(from, count(cps[i] && cps[i].op_index)));
+      out.push(ops.slice(from, to).filter(op => op && op.op === 'insert').reduce((s, op) => s + count(op.len), 0));
+      from = to;
+    }
+    return out;
+  }
+
   // --- formatting ---
   function formatNumber(n) {
     const v = num(n);
@@ -326,23 +362,35 @@ const JitterReceipt = (function () {
   // --- view model ---
   function normalizeTyping(t) {
     t = t && typeof t === 'object' ? t : {};
-    return { mean_dwell: num(t.mean_dwell), std_dwell: num(t.std_dwell), mean_flight: num(t.mean_flight), std_flight: num(t.std_flight), keys: num(t.keys) };
+    return { mean_dwell: num(t.mean_dwell), std_dwell: num(t.std_dwell), mean_flight: num(t.mean_flight), std_flight: num(t.std_flight), keys: num(t.keys), cognitive_ratio: num(t.cognitive_ratio) };
+  }
+  function normalizeInsertedBy(v) {
+    const out = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+    for (const k of Object.keys(v)) {
+      const n = count(v[k]);
+      if (n > 0) { const key = viaKey(k); out[key] = (out[key] || 0) + n; }
+    }
+    return out;
   }
   function normalizeProcess(pr) {
     pr = pr && typeof pr === 'object' ? pr : {};
     const sessions = (Array.isArray(pr.sessions) ? pr.sessions : []).filter(s => s && typeof s === 'object').map(s => ({
-      start: str(s.start), end: str(s.end), active_ms: count(s.active_ms), typed: count(s.typed), pasted: count(s.pasted), deleted: count(s.deleted),
+      start: str(s.start), end: str(s.end), active_ms: count(s.active_ms), typed: count(s.typed), pasted: count(s.pasted), inserted: num(s.inserted), deleted: count(s.deleted),
     }));
     const paste_events = (Array.isArray(pr.paste_events) ? pr.paste_events : []).filter(e => e && typeof e === 'object').map(e => ({ t: str(e.t), len: count(e.len) }));
     const tl = pr.timeline && typeof pr.timeline === 'object' ? pr.timeline : {};
     const buckets = (Array.isArray(tl.buckets) ? tl.buckets : []).filter(b => b && typeof b === 'object' && num(b.i) != null)
-      .map(b => ({ i: Math.max(0, Math.floor(b.i)), typed: count(b.typed), pasted: count(b.pasted), deleted: count(b.deleted) }))
+      .map(b => ({ i: Math.max(0, Math.floor(b.i)), typed: count(b.typed), pasted: count(b.pasted), inserted: count(b.inserted), deleted: count(b.deleted) }))
       .sort((a, b) => a.i - b.i);
     const away = pr.away && typeof pr.away === 'object' ? pr.away : {};
     const rev = pr.revision && typeof pr.revision === 'object' ? pr.revision : {};
     return {
       started_at: str(pr.started_at), finished_at: str(pr.finished_at), sessions,
       active_ms: count(pr.active_ms), typed_chars: count(pr.typed_chars), pasted_chars: count(pr.pasted_chars), deleted_chars: count(pr.deleted_chars),
+      // null on a 4.0 receipt: that version did not record text entered another way
+      inserted_chars: num(pr.inserted_chars) != null ? count(pr.inserted_chars) : null,
+      inserted_by: normalizeInsertedBy(pr.inserted_by),
       typed_share: num(pr.typed_share), paste_events,
       away: { events: count(away.events), total_ms: count(away.total_ms) },
       revision: { backspaces: num(rev.backspaces), cursor_jumps: num(rev.cursor_jumps), backward_edits: num(rev.backward_edits), editing_linearity: num(rev.editing_linearity) },
@@ -350,11 +398,13 @@ const JitterReceipt = (function () {
     };
   }
 
-  // Normalizes a v4 receipt or a v3 badge (content.js / the old Writer) into
-  // one view model. v3 gives signature, text binding, server record and basic counts.
+  // Normalizes a v4 receipt (4.0 or 4.1) or a v3 badge (content.js / the old
+  // Writer) into one view model. v3 gives signature, text binding, server
+  // record and basic counts. 4.0 receipts carry no record of text entered
+  // without keystrokes or a paste (inserted_chars is null for them).
   function describeReceipt(payload) {
     const p = payload && typeof payload === 'object' ? payload : {};
-    const isV4 = p.version === '4.0' && p.process && typeof p.process === 'object';
+    const isV4 = typeof p.version === 'string' && /^4\.\d+$/.test(p.version) && p.process && typeof p.process === 'object';
     const att = p.attestation && typeof p.attestation === 'object' ? p.attestation : null;
     const view = {
       kind: isV4 ? 'receipt' : 'badge',
@@ -377,7 +427,7 @@ const JitterReceipt = (function () {
     };
     if (isV4) {
       view.process = normalizeProcess(p.process);
-      view.counts = { typed: view.process.typed_chars, pasted: view.process.pasted_chars, pastes: view.process.paste_events.length, deleted: view.process.deleted_chars, backspaces: view.process.revision.backspaces };
+      view.counts = { typed: view.process.typed_chars, pasted: view.process.pasted_chars, pastes: view.process.paste_events.length, inserted: view.process.inserted_chars, deleted: view.process.deleted_chars, backspaces: view.process.revision.backspaces };
       view.typing = normalizeTyping(p.typing);
       view.revision = view.process.revision;
       view.ledger = p.ledger && typeof p.ledger === 'object' ? { hash: str(p.ledger.hash), checkpoints: num(p.ledger.checkpoints), ops: num(p.ledger.ops) } : null;
@@ -406,14 +456,26 @@ const JitterReceipt = (function () {
     const bits = [];
     if (t.mean_dwell != null) bits.push('key hold ' + f1(t.mean_dwell) + ' ms' + (t.std_dwell != null ? ' (spread ' + f1(t.std_dwell) + ' ms)' : ''));
     if (t.mean_flight != null) bits.push('between keys ' + f1(t.mean_flight) + ' ms' + (t.std_flight != null ? ' (spread ' + f1(t.std_flight) + ' ms)' : ''));
+    if (t.cognitive_ratio != null) bits.push('pause ratio ' + t.cognitive_ratio.toFixed(2) + ' (between words ÷ within words)');
     if (!bits.length) bits.push('no rhythm statistics (fewer than 10 timed keystrokes)');
     bits.push(rhythm != null ? 'rhythm score ' + rhythm.toFixed(2) + ' — ' + RHYTHM_LABEL : 'no rhythm score — ' + RHYTHM_LABEL);
     return bits.join(' · ');
   }
 
+  // Text that entered without counted keystrokes or a paste (v4.1).
+  function otherSentence(pr, version) {
+    if (pr.inserted_chars == null) {
+      return 'This receipt version (' + (version || '4.0') + ') does not record text that entered without keystrokes or a paste (drag-and-drop, dictation, input methods).';
+    }
+    if (pr.inserted_chars === 0) return 'No text entered without counted keystrokes or a paste.';
+    const parts = Object.keys(INSERT_VIA).filter(k => pr.inserted_by[k] > 0).map(k => INSERT_VIA[k] + ' ' + formatNumber(pr.inserted_by[k]));
+    return plural(pr.inserted_chars, 'character') + ' entered without counted keystrokes or a paste'
+      + (parts.length ? ': ' + parts.join(' · ') : '');
+  }
+
   function summarize(input) {
     const view = input && typeof input === 'object' && typeof input.kind === 'string' ? input : describeReceipt(input);
-    const out = { kind: view.kind, headline: '', sittings: '', active: '', entered: '', share: '', away: '', pastes: [], sessions: [], revision: '', rhythm: '', ledger: '' };
+    const out = { kind: view.kind, headline: '', sittings: '', active: '', entered: '', share: '', other: '', away: '', pastes: [], sessions: [], revision: '', rhythm: '', ledger: '' };
     out.revision = revisionSentence(view.revision);
     out.rhythm = rhythmSentence(view.typing, view.rhythm);
 
@@ -436,11 +498,14 @@ const JitterReceipt = (function () {
     out.sittings = n === 1 ? 'Written in one sitting'
       : 'Written over ' + n + ' sittings' + (days > 1 ? ' across ' + days + ' days' : ' in one day');
     out.active = formatDuration(pr.active_ms) + ' of active writing';
+    const inserted = pr.inserted_chars || 0;
     out.entered = formatNumber(pr.typed_chars) + ' characters typed, ' + formatNumber(pr.pasted_chars) + ' pasted'
       + (pr.paste_events.length ? ' in ' + plural(pr.paste_events.length, 'paste') : '')
+      + (inserted > 0 ? ', ' + formatNumber(inserted) + ' entered another way' : '')
       + ', ' + formatNumber(pr.deleted_chars) + ' deleted';
     out.share = pr.typed_share == null ? 'nothing was entered through the keyboard or the clipboard'
-      : percent(pr.typed_share, pr.pasted_chars) + ' of what was entered was typed here';
+      : percent(pr.typed_share, pr.pasted_chars + inserted) + ' of what was entered was typed here';
+    out.other = otherSentence(pr, view.version);
     out.headline = [out.sittings, out.active, out.entered, out.share].join(' · ') + '.';
     out.away = pr.away.events
       ? 'Away from the Writer ' + plural(pr.away.events, 'time') + ' during a sitting, ' + formatDuration(pr.away.total_ms) + ' in total (not counted as active writing)'
@@ -457,7 +522,9 @@ const JitterReceipt = (function () {
     pr.sessions.forEach((s, i) => {
       out.sessions.push('Sitting ' + (i + 1) + ' · ' + formatDate(s.start) + ' → ' + formatTime(s.end)
         + ' · ' + formatDuration(s.active_ms) + ' active · ' + formatNumber(s.typed) + ' typed, '
-        + formatNumber(s.pasted) + ' pasted, ' + formatNumber(s.deleted) + ' deleted');
+        + formatNumber(s.pasted) + ' pasted, '
+        + (s.inserted > 0 ? formatNumber(s.inserted) + ' entered another way, ' : '')
+        + formatNumber(s.deleted) + ' deleted');
     });
     if (view.ledger) {
       out.ledger = (view.ledger.checkpoints != null ? plural(view.ledger.checkpoints, 'block') : 'blocks unknown')
@@ -468,7 +535,7 @@ const JitterReceipt = (function () {
   }
 
   // --- timeline as inline SVG (no libraries: MV3 CSP) ---
-  // Bars per bucket (typed / pasted / deleted stacked), paste events marked,
+  // Bars per bucket (typed / pasted / entered another way / deleted stacked), paste events marked,
   // sitting boundaries drawn. Everything in the markup is numeric or produced
   // here, so it is safe to place in innerHTML.
   function timelineSvg(process, opts) {
@@ -488,22 +555,23 @@ const JitterReceipt = (function () {
     const plotW = W - padL - padR, plotH = H - padT - padB;
     const bw = plotW / n;
     const xOf = t => padL + ((t - start) / bm) * bw;
-    const maxV = Math.max(1, ...tl.buckets.map(b => b.typed + b.pasted + b.deleted));
+    const maxV = Math.max(1, ...tl.buckets.map(b => b.typed + b.pasted + b.inserted + b.deleted));
+    const LABEL = { typed: 'typed', pasted: 'pasted', inserted: 'entered another way', deleted: 'deleted' };
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const parts = [];
-    parts.push('<svg class="timeline" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" role="img" aria-label="Characters typed, pasted and deleted over time">');
+    parts.push('<svg class="timeline" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" role="img" aria-label="Characters typed, pasted, entered another way and deleted over time">');
     parts.push('<line class="tl-axis" x1="' + padL + '" y1="' + (padT + plotH) + '" x2="' + (W - padR) + '" y2="' + (padT + plotH) + '" stroke="#333" stroke-width="1"/>');
     for (const b of tl.buckets) {
       const x = padL + b.i * bw;
       const w = Math.max(1, bw > 3 ? bw - 1 : bw);
       let y = padT + plotH;
-      for (const key of ['typed', 'pasted', 'deleted']) {
+      for (const key of ['typed', 'pasted', 'inserted', 'deleted']) {
         const v = b[key];
         if (!(v > 0)) continue;
         const h = (v / maxV) * plotH;
         y -= h;
         parts.push('<rect class="tl-' + key + '" x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(w) + '" height="' + f1(h) + '" fill="' + COLORS[key] + '"><title>'
-          + esc(formatNumber(v) + ' ' + key + ' · ' + formatTime(start + b.i * bm)) + '</title></rect>');
+          + esc(formatNumber(v) + ' ' + LABEL[key] + ' · ' + formatTime(start + b.i * bm)) + '</title></rect>');
       }
     }
     pr.sessions.forEach((s, k) => {
@@ -529,10 +597,10 @@ const JitterReceipt = (function () {
 
   return {
     VERSION, RUN_PAUSE_MS, RUN_MAX_KEYS, SESSION_GAP_MS, ACTIVE_GAP_CAP_MS, CHECKPOINT_ACTIVITY_MS, MAX_BUCKETS,
-    FIXED_NOTE, FIXED_NOTE_HTML, RHYTHM_LABEL, COLORS,
+    FIXED_NOTE, FIXED_NOTE_HTML, RHYTHM_LABEL, COLORS, INSERT_VIA,
     toMs, iso,
     sessionsFrom, activeMs, countOps, timelineFrom, bucketMsFor, awayFrom, buildProcess,
-    sha256Hex, checkpointHash, verifyLedger, pasteCheckpoints,
+    sha256Hex, checkpointHash, verifyLedger, pasteCheckpoints, insertCheckpoints,
     describeReceipt, normalizeProcess, summarize, timelineSvg,
     formatDuration, formatNumber, formatDate, formatDay, formatTime, percent, plural,
   };

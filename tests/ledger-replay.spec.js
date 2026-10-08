@@ -153,7 +153,7 @@ test.describe('Writing Ledger & Replay', () => {
     expect(download.filename).toMatch(/^untitled-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.jitter-ledger\.json$/);
     const file = download.json;
 
-    expect(file.version).toBe('4.0');
+    expect(file.version).toBe('4.1');
     expect(file.type).toBe('jitter-ledger');
     expect(file.started_at).toMatch(ISO);
     expect(file.exported_at).toMatch(ISO);

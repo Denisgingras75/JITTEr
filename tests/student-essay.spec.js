@@ -115,7 +115,7 @@ test.describe('Student Essay Flow', () => {
     expect(receipt.plain).toContain('#jitter:' + receipt.base64);
 
     // The signed payload
-    expect(p.version).toBe('4.0');
+    expect(p.version).toBe('4.1');
     expect(p.type).toBe('process-receipt');
     expect(p.title).toBe('Untitled');
     expect(p.url).toBe('jitter://writer');
