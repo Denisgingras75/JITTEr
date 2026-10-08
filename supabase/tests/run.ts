@@ -1,8 +1,11 @@
-// Backend tests: the real attest and verify functions, run against a PGlite
-// database with the repo migrations applied. Run with `npm run test:backend`.
+// Backend tests: the real attest, verify and erase functions, run against a
+// PGlite database with the repo migrations applied. Run with `npm run test:backend`.
 // deno-lint-ignore-file no-explicit-any
 import { makeDb } from './db.mjs';
-import { canonicalJson, deviceIdFor, signEcdsa, verifyEcdsa, sha256Hex, timeCapForAge, classify } from '../functions/_shared/trust.ts';
+import {
+  canonicalJson, classify, clientAddress, deviceIdFor, isFreshTimestamp, keyIdFromDeviceId, rpcScalar,
+  sha256Hex, signEcdsa, timeCapForAge, verifyEcdsa,
+} from '../functions/_shared/trust.ts';
 
 const g = globalThis as any;
 let failed = 0;
@@ -24,16 +27,21 @@ g.__pg = await makeDb();
 
 await import('../functions/attest/index.ts');
 await import('../functions/verify/index.ts');
-const [attestH, verifyH] = g.__handlers;
+await import('../functions/erase/index.ts');
+const [attestH, verifyH, eraseH] = g.__handlers;
 
 const ATTEST = 'http://tests.local/functions/v1/attest';
 const VERIFY = 'http://tests.local/functions/v1/verify';
-async function attest(body: unknown, headers: Record<string, string> = { 'Content-Type': 'application/json' }) {
-  const res = await attestH(new Request(ATTEST, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) }));
+const ERASE = 'http://tests.local/functions/v1/erase';
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+async function post(handler: (req: Request) => Promise<Response>, url: string, body: unknown, headers: Record<string, string>) {
+  const res = await handler(new Request(url, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) }));
   const text = await res.text();
   let json: any = null; try { json = JSON.parse(text); } catch { /* not json */ }
   return { status: res.status, json, text };
 }
+const attest = (body: unknown, headers: Record<string, string> = JSON_HEADERS) => post(attestH, ATTEST, body, headers);
+const erase = (body: unknown, headers: Record<string, string> = JSON_HEADERS) => post(eraseH, ERASE, body, headers);
 async function verify(query: string) {
   const res = await verifyH(new Request(`${VERIFY}?${query}`, { method: 'GET' }));
   const text = await res.text();
@@ -59,6 +67,17 @@ async function signedBadge(dev: any, overrides: Record<string, unknown> = {}) {
   };
   const signature = await signEcdsa(dev.priv, canonicalJson(badge));
   return { badge, signature };
+}
+// An erase request, signed the way the popup signs it: over { action, publicKeyJwk, requested_at }.
+async function signedErase(dev: any, opts: { requested_at?: string; signer?: any; action?: string } = {}) {
+  const requested_at = opts.requested_at ?? new Date().toISOString();
+  const signature = await signEcdsa((opts.signer ?? dev).priv, canonicalJson({ action: opts.action ?? 'erase', publicKeyJwk: dev.pub, requested_at }));
+  return { publicKeyJwk: dev.pub, requested_at, signature };
+}
+// Runs a statement as the anon role (what the public anon key can do).
+async function asAnon(sql: string) {
+  try { await g.__pg.transaction(async (tx: any) => { await tx.exec('SET LOCAL ROLE anon'); await tx.query(sql); }); return 'ALLOWED'; }
+  catch (e: any) { return /permission denied/.test(e.message) ? 'DENIED' : 'ERROR ' + e.message; }
 }
 
 // ── T0 canonicalJson matches the extension's implementation ─────────────
@@ -177,10 +196,6 @@ const badgeHash = r1.json?.badge_hash;
 
 // ── T8 the anon role can't reach any of it directly ─────────────────────
 {
-  const asAnon = async (sql: string) => {
-    try { await g.__pg.transaction(async (tx: any) => { await tx.exec('SET LOCAL ROLE anon'); await tx.query(sql); }); return 'ALLOWED'; }
-    catch (e: any) { return /permission denied/.test(e.message) ? 'DENIED' : 'ERROR ' + e.message; }
-  };
   assert(await asAnon('select * from devices') === 'DENIED', 'T8 anon cannot read devices');
   assert(await asAnon('select * from attestations') === 'DENIED', 'T8 anon cannot read attestations');
   assert(await asAnon(`select * from touch_device('x', '{}'::jsonb, 'wgh')`) === 'DENIED', 'T8 anon cannot call touch_device');
@@ -191,6 +206,162 @@ const badgeHash = r1.json?.badge_hash;
 {
   assert([0, 1, 7, 30, 90, 180].map(timeCapForAge).join(',') === '0.35,0.5,0.65,0.8,0.92,1', 'T9 time cap step table');
   assert(classify(0.35, 0.72, 0.35, []) === 'building' && classify(0.85, 0.85, 1, []) === 'verified' && classify(0.1, 0.1, 1, []) === 'bot', 'T9 classify');
+}
+
+// ── T10 site-key allowlist ──────────────────────────────────────────────
+{
+  const d = await makeDevice();
+  const r = await attest({ site_key: 'nope', ...(await signedBadge(d)) });
+  assert(r.status === 400 && r.json?.error === 'unknown_site_key', 'T10 a well-formed site key that is not on the list is refused (unknown_site_key)');
+  Deno.env.set('JITTER_SITE_KEYS', 'wgh, demo');
+  const demo = await attest({ site_key: 'demo', ...(await signedBadge(d)) });
+  const ext = await attest({ site_key: 'extension', ...(await signedBadge(d)) });
+  assert(demo.status === 200 && ext.status === 400 && ext.json?.error === 'unknown_site_key', 'T10 JITTER_SITE_KEYS replaces the default list and is read per request');
+  Deno.env.delete('JITTER_SITE_KEYS');
+  const writer = await attest({ site_key: 'writer', ...(await signedBadge(d)) });
+  const ext2 = await attest({ site_key: 'extension', ...(await signedBadge(d)) });
+  assert(writer.status === 200 && ext2.status === 200, 'T10 the default list is extension, writer, wgh');
+}
+
+// ── T11 per-address rate limit ──────────────────────────────────────────
+{
+  Deno.env.set('JITTER_MAX_ATTESTS_PER_IP_HOUR', '5');
+  Deno.env.set('JITTER_IP_SALT', 'salt-for-tests');
+  const from = (h: Record<string, string>) => ({ ...JSON_HEADERS, ...h });
+  const a = await makeDevice();
+  const rs: any[] = [];
+  for (let i = 0; i < 6; i++) rs.push(await attest({ site_key: 'wgh', ...(await signedBadge(a)) }, from({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1' })));
+  assert(rs.slice(0, 5).every(r => r.status === 200) && rs[5].status === 429 && rs[5].json?.error === 'rate_limited_ip',
+    `T11 the sixth request in an hour from one address is 429 rate_limited_ip (got ${rs.map(r => r.status).join(',')})`);
+  const b = await makeDevice();
+  const other = await attest({ site_key: 'wgh', ...(await signedBadge(b)) }, from({ 'x-forwarded-for': '198.51.100.7' }));
+  assert(other.status === 200, 'T11 another address still passes');
+  const cf = await attest({ site_key: 'wgh', ...(await signedBadge(b)) }, from({ 'cf-connecting-ip': '203.0.113.9' }));
+  assert(cf.status === 429, 'T11 cf-connecting-ip is used when x-forwarded-for is absent: same address, same bucket');
+  const er = await erase(await signedErase(a), from({ 'x-forwarded-for': '203.0.113.9' }));
+  assert(er.status === 429 && er.json?.error === 'rate_limited_ip', 'T11 erase draws on the same address budget');
+  const rows = (await g.__pg.query('select bucket, count from ip_windows')).rows;
+  const expected = await sha256Hex('203.0.113.9:salt-for-tests');
+  const mine = rows.find((r: any) => r.bucket === expected);
+  assert(mine && mine.count === 8, `T11 the bucket is sha256(address:salt) and refused calls still count (got ${JSON.stringify(mine)})`);
+  const dump = JSON.stringify(rows);
+  assert(rows.length > 0 && rows.every((r: any) => /^[0-9a-f]{64}$/.test(r.bucket)) && !dump.includes('203.0.113') && !dump.includes('198.51.100') && !dump.includes('10.0.0.1'),
+    'T11 ip_windows holds salted hashes and counts, never an address');
+  Deno.env.delete('JITTER_MAX_ATTESTS_PER_IP_HOUR');
+  Deno.env.delete('JITTER_IP_SALT');
+  const relaxed = await attest({ site_key: 'wgh', ...(await signedBadge(a)) }, from({ 'x-forwarded-for': '203.0.113.9' }));
+  assert(relaxed.status === 200, 'T11 default limit (600) restored; a new salt is a new bucket');
+}
+
+// ── T12 erase ───────────────────────────────────────────────────────────
+{
+  const d = await makeDevice();
+  const minted = await attest({ site_key: 'wgh', ...(await signedBadge(d)) });
+  const hash = minted.json?.badge_hash;
+  const bystander = await makeDevice();
+  await attest({ site_key: 'wgh', ...(await signedBadge(bystander)) });
+  const rowsFor = async (id: string) => {
+    const n = async (sql: string) => (await g.__pg.query(sql, [id])).rows[0].n;
+    return [await n('select count(*)::int as n from attestations where device_id = $1'),
+            await n('select count(*)::int as n from profiles where user_id = $1'),
+            await n('select count(*)::int as n from devices where device_id = $1')].join(',');
+  };
+  assert(minted.status === 200 && await rowsFor(d.id) === '1,1,1', 'T12 setup: one attestation, one profile, one device row');
+
+  const other = await makeDevice();
+  const wrong = await erase(await signedErase(d, { signer: other }));
+  assert(wrong.status === 401 && wrong.json?.error === 'bad_signature', 'T12 a request signed by another key is refused (bad_signature)');
+  const stale = await erase(await signedErase(d, { requested_at: new Date(Date.now() - 20 * 60000).toISOString() }));
+  assert(stale.status === 400 && stale.json?.error === 'stale_request', 'T12 requested_at 20 minutes old is refused (stale_request)');
+  const early = await erase(await signedErase(d, { requested_at: new Date(Date.now() + 20 * 60000).toISOString() }));
+  assert(early.status === 400 && early.json?.error === 'stale_request', 'T12 requested_at 20 minutes ahead is refused too');
+  const otherAction = await erase(await signedErase(d, { action: 'attest' }));
+  assert(otherAction.status === 401, 'T12 the signature must be over { action: "erase", publicKeyJwk, requested_at }');
+  const tampered = { ...(await signedErase(d)), requested_at: new Date(Date.now() + 1000).toISOString() };
+  assert((await erase(tampered)).status === 401, 'T12 changing requested_at after signing breaks the signature');
+  assert(await rowsFor(d.id) === '1,1,1', 'T12 refused requests erased nothing');
+
+  const ok = await erase(await signedErase(d));
+  assert(ok.status === 200 && ok.json?.device_id === d.id && JSON.stringify(ok.json?.deleted) === JSON.stringify({ attestations: 1, profiles: 1, devices: 1 }),
+    `T12 a correctly signed request erases the attestation, the profile and the device (got ${ok.status} ${ok.text.slice(0, 160)})`);
+  assert(await rowsFor(d.id) === '0,0,0', 'T12 no row for the device remains');
+  const gone = await verify(`hash=${hash}&format=json`);
+  assert(gone.status === 404, 'T12 /verify no longer finds the badge');
+  assert(await rowsFor(bystander.id) === '1,1,1', 'T12 another device\'s rows are untouched');
+  const again = await erase(await signedErase(d));
+  assert(again.status === 200 && JSON.stringify(again.json?.deleted) === JSON.stringify({ attestations: 0, profiles: 0, devices: 0 }), 'T12 a second erase returns zeros');
+  const reborn = await attest({ site_key: 'wgh', ...(await signedBadge(d)) });
+  assert(reborn.status === 200 && reborn.json?.attestation?.age_days === 0 && reborn.json?.profile?.badges === 1, 'T12 the device can start over afterwards: age 0, fresh profile');
+
+  const badJwk = await erase({ publicKeyJwk: { kty: 'RSA', n: 'x' }, requested_at: new Date().toISOString(), signature: 'AA==' });
+  assert(badJwk.status === 400 && badJwk.json?.error === 'bad_public_key', 'T12 a key that is not P-256 is refused (bad_public_key)');
+  const missing = await erase({ publicKeyJwk: d.pub });
+  assert(missing.status === 400 && missing.json?.error === 'missing_fields', 'T12 requested_at and signature are required');
+  const big = await erase('{"publicKeyJwk":{"x":"' + 'a'.repeat(5000) + '"}}');
+  assert(big.status === 413 && big.json?.error === 'payload_too_large', 'T12 oversized body is refused');
+  const opts = await eraseH(new Request(ERASE, { method: 'OPTIONS' }));
+  assert(opts.status === 200 && opts.headers.get('access-control-allow-origin') === '*' && /content-type/.test(opts.headers.get('access-control-allow-headers') || ''), 'T12 CORS preflight, same headers as attest');
+  assert((await eraseH(new Request(ERASE, { method: 'GET' }))).status === 405, 'T12 GET is refused');
+}
+
+// ── T12b erase covers every attestation of the device, whatever the site ─
+{
+  const d = await makeDevice();
+  for (const site of ['wgh', 'writer', 'extension']) await attest({ site_key: site, ...(await signedBadge(d)) });
+  const r = await erase(await signedErase(d));
+  assert(r.status === 200 && JSON.stringify(r.json?.deleted) === JSON.stringify({ attestations: 3, profiles: 1, devices: 1 }), `T12b three attestations on three sites, one profile, one device (got ${JSON.stringify(r.json?.deleted)})`);
+}
+
+// ── T13 the anon role can't reach the new objects either ────────────────
+{
+  assert(await asAnon('select * from ip_windows') === 'DENIED', 'T13 anon cannot read ip_windows');
+  assert(await asAnon(`select bump_ip_window('x', 1)`) === 'DENIED', 'T13 anon cannot call bump_ip_window');
+  assert(await asAnon(`select prune_ip_windows()`) === 'DENIED', 'T13 anon cannot call prune_ip_windows');
+  assert(await asAnon(`select * from erase_device('x')`) === 'DENIED', 'T13 anon cannot call erase_device');
+}
+
+// ── T14 the window functions themselves ─────────────────────────────────
+{
+  await g.__pg.exec(`insert into ip_windows (bucket, window_start, count) values ('stale-window', now() - interval '2 days', 3)`);
+  const pruned = (await g.__pg.query('select prune_ip_windows() as n')).rows[0].n;
+  const left = (await g.__pg.query(`select count(*)::int as n from ip_windows where bucket = 'stale-window'`)).rows[0].n;
+  const kept = (await g.__pg.query(`select count(*)::int as n from ip_windows where window_start = date_trunc('hour', now())`)).rows[0].n;
+  assert(pruned >= 1 && left === 0 && kept > 0, `T14 prune_ip_windows drops windows older than a day and keeps the current hour (pruned ${pruned}, left ${left}, kept ${kept})`);
+  const seq: boolean[] = [];
+  for (let i = 0; i < 4; i++) seq.push((await g.__pg.query(`select bump_ip_window('window-test', 3) as ok`)).rows[0].ok);
+  assert(seq.join(',') === 'true,true,true,false', `T14 bump_ip_window allows up to the limit and refuses the next (got ${seq})`);
+  const c = (await g.__pg.query(`select count from ip_windows where bucket = 'window-test'`)).rows[0].count;
+  assert(c === 4, `T14 one row per bucket per hour; the refused call is counted (got ${c})`);
+}
+
+// ── T15 helpers ─────────────────────────────────────────────────────────
+{
+  assert(isFreshTimestamp(new Date().toISOString()) && !isFreshTimestamp(new Date(Date.now() - 11 * 60000).toISOString())
+    && !isFreshTimestamp('yesterday') && !isFreshTimestamp(12345), 'T15 isFreshTimestamp: an ISO timestamp within ten minutes');
+  assert(rpcScalar(true, 'f') === true && rpcScalar([{ f: false }], 'f') === false && rpcScalar(null, 'f') === null, 'T15 rpcScalar reads PostgREST scalars and SELECT * rows alike');
+  const req = (h: Record<string, string>) => new Request('http://x/', { headers: h });
+  assert(clientAddress(req({ 'x-forwarded-for': ' 203.0.113.9 , 10.0.0.1' })) === '203.0.113.9' && clientAddress(req({ 'cf-connecting-ip': '198.51.100.7' })) === '198.51.100.7'
+    && clientAddress(req({})) === 'unknown', 'T15 clientAddress: first x-forwarded-for entry, then cf-connecting-ip, then "unknown"');
+}
+
+// ── T16 server key id travels with the record (rotation) ────────────────
+{
+  const oldId = keyIdFromDeviceId(await deviceIdFor(serverPub));
+  const stored = (await g.__pg.query('select server_key_id from attestations where badge_hash = $1', [badgeHash])).rows[0]?.server_key_id;
+  assert(r1.json?.server_key_id === oldId && stored === oldId, `T16 server_key_id is the server key's id and is stored with the attestation (got ${r1.json?.server_key_id}, stored ${stored})`);
+  const oldSecret = Deno.env.get('JITTER_SERVER_KEY_JWK')!;
+  const rotated = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const newPriv = await crypto.subtle.exportKey('jwk', rotated.privateKey);
+  const newPub = { kty: 'EC', crv: 'P-256', x: newPriv.x!, y: newPriv.y! };
+  const newId = keyIdFromDeviceId(await deviceIdFor(newPub));
+  Deno.env.set('JITTER_SERVER_KEY_JWK', JSON.stringify({ ...newPub, d: newPriv.d }));
+  const replay = await attest({ site_key: 'wgh', ...first });
+  assert(replay.json?.duplicate === true && replay.json?.server_key_id === oldId && replay.json?.server_signature === r1.json.server_signature,
+    'T16 after rotation a replayed badge returns its stored signature and the id of the key that made it');
+  const fresh = await attest({ site_key: 'wgh', ...(await signedBadge(dev)) });
+  assert(fresh.status === 200 && fresh.json?.server_key_id === newId && newId !== oldId
+    && await verifyEcdsa(newPub, canonicalJson(fresh.json.attestation), fresh.json.server_signature), 'T16 new attestations are countersigned with the new key and carry its id');
+  Deno.env.set('JITTER_SERVER_KEY_JWK', oldSecret);
 }
 
 console.log(failed ? `\n${failed} FAILED` : '\nAll backend tests passed.');

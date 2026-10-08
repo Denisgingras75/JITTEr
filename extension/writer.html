@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    writer.html - JITTEr Writer Interface
+    writer.html - JITTEr Writer
 
     Copyright (c) 2025-2026 Denis Gingras. All Rights Reserved.
 
@@ -8,12 +8,17 @@
     This file is part of the JITTEr project.
     Unauthorized copying, modification, or use is strictly prohibited.
     See LICENSE file for full terms.
+
+    The Writer records how a text is entered (typed / pasted / deleted,
+    sittings, active writing time, typing rhythm), autosaves locally and
+    issues a signed process receipt. Contract: docs/product/PROCESS_RECEIPT.md.
+    Manifest V3 page: no inline scripts, no remote scripts.
 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jitter Writer | Verified Environment</title>
+    <title>Jitter Writer | Process Receipt</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -28,18 +33,43 @@
 
         /* SIDEBAR */
         #sidebar {
-            width: 260px;
+            width: 280px;
             background: #0a0a0a;
             border-right: 1px solid #222;
-            padding: 20px;
+            padding: 18px;
             display: flex;
             flex-direction: column;
             z-index: 10;
+            overflow-y: auto;
         }
-        .stat-box { margin-bottom: 20px; padding: 15px; background: #111; border: 1px solid #222; border-radius: 6px; }
-        .label { font-size: 10px; color: #666; letter-spacing: 1px; margin-bottom: 5px; text-transform: uppercase; font-weight: bold; }
-        .value { font-size: 24px; font-weight: 700; color: #fff; font-family: 'Courier New', monospace; }
-        
+        .brand { margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+        .brand-name { font-weight: 800; color: #fff; }
+        .brand-sub { font-size: 10px; color: #666; letter-spacing: 1px; }
+
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .stat-box { padding: 10px 12px; background: #111; border: 1px solid #222; border-radius: 6px; min-width: 0; }
+        .stat-box.wide { grid-column: 1 / -1; }
+        .label { font-size: 9px; color: #666; letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; font-weight: bold; }
+        .value { font-size: 20px; font-weight: 700; color: #fff; font-family: 'Courier New', monospace; line-height: 1.2; }
+        .value.small { font-size: 14px; }
+        .sub { font-size: 10px; color: #777; margin-top: 3px; }
+        .typed { color: #00F0FF; }
+        .pasted { color: #FFD700; }
+        .deleted { color: #9A8CFF; }
+        .ledger-hash {
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            color: #00F0FF;
+            letter-spacing: 1px;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+        #passport-line { font-size: 11px; color: #999; }
+        .note {
+            font-size: 10px; color: #666; line-height: 1.5; margin-top: 12px;
+            border-top: 1px solid #1c1c1c; padding-top: 10px;
+        }
+
         /* MAIN AREA */
         #main {
             flex-grow: 1;
@@ -65,11 +95,11 @@
             font-weight: bold; font-size: 14px; transition: all 0.2s;
         }
         .tool-btn:hover { background: #222; color: #fff; }
-        
         .tool-select {
             background: #111; color: #ddd; border: 1px solid #333;
             padding: 5px; border-radius: 4px; font-size: 12px; cursor: pointer;
         }
+        #save-state { margin-left: auto; font-size: 11px; color: #555; font-family: 'Courier New', monospace; }
 
         /* THE PAGE */
         #editor-container {
@@ -97,111 +127,14 @@
         .spacing-2    { line-height: 2.0 !important; }
 
         /* BUTTONS */
-        .btn { width: 100%; padding: 12px; background: #111; border: 1px solid #333; color: #fff; cursor: pointer; font-family: 'Courier New', monospace; font-weight: bold; margin-top: 10px; }
+        .btn { width: 100%; padding: 11px; background: #111; border: 1px solid #333; color: #fff; cursor: pointer; font-family: 'Courier New', monospace; font-weight: bold; margin-top: 8px; font-size: 12px; }
         .btn:hover { background: #222; border-color: #fff; }
-        .btn-primary { background: #00F0FF11; border-color: #00F0FF; color: #00F0FF; }
+        .btn:disabled { opacity: 0.4; cursor: default; }
+        .btn:disabled:hover { background: #111; border-color: #333; }
+        .btn-primary { background: #00F0FF11; border-color: #00F0FF; color: #00F0FF; font-size: 13px; }
         .btn-primary:hover { background: #00F0FF22; box-shadow: 0 0 15px #00F0FF44; }
-
-        /* AUTH MODAL */
-        #auth-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.9);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .auth-modal-content {
-            background: #0a0a0a;
-            border: 2px solid #00F0FF;
-            border-radius: 12px;
-            padding: 40px;
-            width: 400px;
-            max-width: 90%;
-        }
-        .auth-modal-header {
-            font-size: 24px;
-            font-weight: bold;
-            color: #fff;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .auth-input {
-            width: 100%;
-            padding: 12px;
-            background: #111;
-            border: 1px solid #333;
-            border-radius: 6px;
-            color: #ddd;
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-        .auth-input:focus {
-            outline: none;
-            border-color: #00F0FF;
-        }
-        .auth-error {
-            color: #FF0055;
-            font-size: 12px;
-            margin-bottom: 15px;
-            min-height: 16px;
-        }
-        .auth-toggle {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 12px;
-            color: #888;
-        }
-        .auth-toggle a {
-            color: #00F0FF;
-            cursor: pointer;
-            text-decoration: underline;
-        }
-        #auth-notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #00F0FF22;
-            border: 2px solid #00F0FF;
-            color: #00F0FF;
-            padding: 15px 25px;
-            border-radius: 6px;
-            z-index: 2000;
-            display: none;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-        }
-        .auth-box {
-            background: #111;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .auth-box-title {
-            font-size: 10px;
-            color: #666;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            font-weight: bold;
-        }
-        .auth-box-email {
-            font-size: 12px;
-            color: #ddd;
-            margin-bottom: 10px;
-            word-break: break-all;
-        }
-        .auth-box-status {
-            font-size: 10px;
-            color: #666;
-            margin-top: 5px;
-        }
-        .btn-small {
-            padding: 8px;
-            font-size: 12px;
-        }
+        .btn-quiet { border-color: #00F0FF44; color: #00F0FF; background: #00F0FF08; }
+        .actions { margin-top: auto; padding-top: 10px; }
 
         /* REPLAY PANEL */
         #replay-panel {
@@ -247,13 +180,23 @@
         }
         #replay-blur-indicator {
             display: none;
-            background: #FF005511;
-            border: 1px solid #FF0055;
-            color: #FF0055;
+            background: #9A8CFF11;
+            border: 1px solid #9A8CFF;
+            color: #9A8CFF;
             padding: 3px 10px;
             border-radius: 4px;
             font-size: 11px;
             font-family: 'Courier New', monospace;
+        }
+        #replay-close-btn {
+            margin-left: auto;
+            background: transparent;
+            border: 1px solid #444;
+            color: #888;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
         }
         #replay-controls {
             display: flex;
@@ -282,15 +225,6 @@
             white-space: nowrap;
         }
         #replay-play-btn:hover { background: #00F0FF22; }
-        #replay-close-btn {
-            background: transparent;
-            border: 1px solid #444;
-            color: #888;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
         #replay-editor {
             flex: 1;
             overflow-y: auto;
@@ -305,72 +239,68 @@
             white-space: pre-wrap;
             transition: background 0.3s ease, border-color 0.3s ease;
         }
-        .ledger-hash {
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            color: #00F0FF;
-            letter-spacing: 1px;
-            margin-top: 4px;
-            word-break: break-all;
-        }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <div style="margin-bottom:30px; display:flex; align-items:center; gap:10px;">
+        <div class="brand">
             <div style="font-size:24px;">⚡</div>
             <div>
-                <div style="font-weight:800; color:#fff;">JITTER</div>
-                <div style="font-size:10px; color:#666;">WRITER PRO</div>
+                <div class="brand-name">JITTER</div>
+                <div class="brand-sub">WRITER · PROCESS RECEIPT</div>
             </div>
         </div>
 
-        <div class="auth-box" id="auth-box">
-            <div class="auth-box-title">Cloud Sync (Optional)</div>
-            <div class="auth-box-email" id="auth-email">Not logged in</div>
-            <div class="auth-box-status" id="sync-status">Login to sync passport</div>
-            <button class="btn btn-small btn-primary" id="btn-login" style="margin-top:10px;">LOGIN</button>
-            <button class="btn btn-small" id="btn-sync" style="display:none; margin-top:10px;">SYNC NOW</button>
-            <button class="btn btn-small" id="btn-logout" style="display:none; margin-top:10px;">LOGOUT</button>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <div class="label">Words</div>
+                <div class="value" id="word-count">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Sittings</div>
+                <div class="value" id="sittings-count">1</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Typed</div>
+                <div class="value typed" id="typed-count">0</div>
+                <div class="sub">characters</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Pasted</div>
+                <div class="value pasted" id="pasted-count">0</div>
+                <div class="sub" id="paste-events">no pastes</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Deleted</div>
+                <div class="value deleted" id="deleted-count">0</div>
+                <div class="sub">characters</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Active writing</div>
+                <div class="value small" id="active-time">0 s</div>
+            </div>
+            <div class="stat-box wide" style="border-color:#00F0FF33;">
+                <div class="label">Writing ledger</div>
+                <div class="value small" id="ledger-count" style="color:#00F0FF;">0 blocks</div>
+                <div class="ledger-hash" id="ledger-hash">—</div>
+            </div>
+            <div class="stat-box wide" style="border-color:#FFD70033;">
+                <div class="label">This device</div>
+                <div id="passport-line">Device first used today · 0 receipts</div>
+            </div>
         </div>
 
-        <div class="stat-box">
-            <div class="label">Session Purity</div>
-            <div class="value" id="purity-display" style="color: #00F0FF;">100%</div>
-        </div>
-
-        <div class="stat-box">
-            <div class="label">Rhythm Entropy</div>
-            <div class="value" id="entropy-display" style="color: #888;">100</div>
-        </div>
-
-        <div class="stat-box">
-            <div class="label">Human Edits</div>
-            <div class="value" id="edits-display" style="color: #FFD700;">0</div>
-        </div>
-
-        <div class="stat-box">
-            <div class="label">Words</div>
-            <div class="value" id="word-count">0</div>
-        </div>
-
-        <div class="stat-box" style="border-color:#FFD700;">
-            <div class="label">Lifetime Passport</div>
-            <div class="value" id="passport-display" style="color: #FFD700;">0</div>
-            <div style="font-size:10px; color:#666; margin-top:5px;" id="passport-level">Novice</div>
-        </div>
-
-        <div class="stat-box" style="border-color:#00F0FF33;">
-            <div class="label">Writing Ledger</div>
-            <div class="value" id="ledger-count" style="color:#00F0FF; font-size:16px;">0 blocks</div>
-            <div class="ledger-hash" id="ledger-hash">—</div>
-        </div>
-
-        <div style="margin-top:auto;">
-            <button class="btn btn-primary" id="btn-export">MINT BADGE</button>
-            <button class="btn" id="btn-replay" style="border-color:#00F0FF44; color:#00F0FF; background:#00F0FF08;">REPLAY</button>
-            <button class="btn" id="btn-export-ledger" style="font-size:11px;">EXPORT LEDGER</button>
-            <button class="btn" id="btn-reset">RESET</button>
+        <div class="actions">
+            <button class="btn btn-primary" id="btn-export">GET RECEIPT</button>
+            <button class="btn" id="btn-download-receipt" disabled>DOWNLOAD RECEIPT</button>
+            <button class="btn" id="btn-export-ledger">DOWNLOAD LEDGER</button>
+            <button class="btn btn-quiet" id="btn-replay">REPLAY</button>
+            <button class="btn" id="btn-new-doc">NEW DOCUMENT</button>
+            <div class="note">
+                The receipt records how this text was entered: typed, pasted and deleted characters,
+                sittings, active writing time and typing rhythm. It never records the characters themselves.
+                The document autosaves on this device.
+            </div>
         </div>
     </div>
 
@@ -392,38 +322,19 @@
             <button class="tool-btn" data-cmd="underline">U</button>
             <button class="tool-btn" data-cmd="formatBlock" data-val="H1">H1</button>
             <button class="tool-btn" data-cmd="formatBlock" data-val="H2">H2</button>
+            <span id="save-state"></span>
         </div>
         <div id="editor-container">
             <div id="editor" class="font-classic spacing-15" contenteditable="true" placeholder="Start typing..."></div>
         </div>
     </div>
-    <!-- Auth Modal -->
-    <div id="auth-modal">
-        <div class="auth-modal-content">
-            <div class="auth-modal-header">⚡ Login to JITTEr</div>
-            <input type="email" class="auth-input" id="auth-email-input" placeholder="Email">
-            <input type="password" class="auth-input" id="auth-password-input" placeholder="Password">
-            <div class="auth-error" id="auth-error"></div>
-            <button class="btn btn-primary" id="auth-submit-btn">
-                <span id="auth-submit-text">LOGIN</span>
-            </button>
-            <div class="auth-toggle">
-                <input type="checkbox" id="auth-mode-toggle">
-                <label for="auth-mode-toggle">New user? Sign up instead</label>
-            </div>
-            <button class="btn" style="margin-top:20px;" id="auth-cancel-btn">CANCEL</button>
-        </div>
-    </div>
-
-    <!-- Notification Toast -->
-    <div id="auth-notification"></div>
 
     <!-- Writing Ledger Replay Panel -->
     <div id="replay-panel">
         <div id="replay-header">
             <span id="replay-title">⚡ WRITING LEDGER — REPLAY</span>
             <span id="replay-time">T+0:00</span>
-            <span id="replay-paste-indicator">📋 PASTE EVENT</span>
+            <span id="replay-paste-indicator">📋 PASTE IN THIS BLOCK</span>
             <span id="replay-blur-indicator"></span>
             <button id="replay-close-btn">✕ CLOSE</button>
         </div>
@@ -437,13 +348,11 @@
         <div id="replay-editor"></div>
     </div>
 
-    <!-- Firebase SDK -->
-
-    <!-- Cloud sync (auth-utils.js) is not loaded: it needs the Firebase SDK, which MV3 blocks. -->
     <script src="src/crypto-utils.js"></script>
     <script src="src/passport-utils.js"></script>
     <script src="src/war-score.js"></script>
     <script src="src/biometrics.js"></script>
+    <script src="src/receipt-utils.js"></script>
     <script src="src/writer.js"></script>
     <script src="src/writer-page.js"></script>
 

@@ -2,12 +2,11 @@
   "manifest_version": 3,
   "name": "Jitter Protocol",
   "version": "3.0",
-  "description": "Biometric Content Verification & Integrity Analysis",
-  "permissions": ["storage", "clipboardWrite", "identity"],
+  "description": "Records how you type on sites you enable, never what you type, and signs a process receipt.",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage", "unlimitedStorage", "clipboardWrite", "scripting", "activeTab"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "host_permissions": [
-    "https://*.firebaseapp.com/*",
-    "https://*.googleapis.com/*",
-    "https://www.gstatic.com/*",
     "https://fmguuhnustgcqzgjaoil.supabase.co/*"
   ],
   "action": {
@@ -16,17 +15,5 @@
   },
   "background": {
     "service_worker": "src/background.js"
-  },
-  "oauth2": {
-    "client_id": "566032736562-p2i6227lh4b9qblcknv6b8l2jkurj1gs.apps.googleusercontent.com",
-    "scopes": ["openid", "email", "profile"]
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "all_frames": true,
-      "js": ["src/crypto-utils.js", "src/passport-utils.js", "src/war-score.js", "src/biometrics.js", "src/content.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }

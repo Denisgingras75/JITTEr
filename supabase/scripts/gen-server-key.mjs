@@ -6,7 +6,7 @@
 // Then:
 //   1. Store the PRIVATE key as a function secret (never commit it):
 //        supabase secrets set JITTER_SERVER_KEY_JWK='<private jwk on one line>'
-//   2. Paste the PUBLIC key into extension/src/server-key.js so verify.html
+//   2. Add the PUBLIC key to CryptoUtils.SERVER_PUBLIC_KEYS in extension/src/crypto-utils.js (keyed by its key id) so verify.html
 //      can check server signatures offline.
 
 const { subtle } = globalThis.crypto;
@@ -19,6 +19,6 @@ const id = Array.from(new Uint8Array(await subtle.digest('SHA-256', raw)))
 
 console.log('# PRIVATE key (Supabase secret JITTER_SERVER_KEY_JWK) - keep this out of git:');
 console.log(JSON.stringify({ kty: priv.kty, crv: priv.crv, x: priv.x, y: priv.y, d: priv.d }));
-console.log('\n# PUBLIC key for extension/src/server-key.js:');
+console.log('\n# PUBLIC key for CryptoUtils.SERVER_PUBLIC_KEYS in extension/src/crypto-utils.js:');
 console.log(JSON.stringify({ kty: pub.kty, crv: pub.crv, x: pub.x, y: pub.y }));
 console.log('\n# key id:', id);
