@@ -1,5 +1,8 @@
-// Cheapest attack against the attest contract as built: no browser, no typing,
-// no engine. Generate a key, sign a badge that CLAIMS a score, POST it.
+// Cheapest attack against the attest contract AS IT WAS (September 2026): no
+// browser, no typing, no engine. Generate a key, sign a badge that CLAIMS a
+// score, POST it. Since 2026-10-08 /attest scores the timing payload itself
+// and refuses this request (missing_timing); kept as the record of the
+// measurement in docs/adversarial/PERSONA_MONTH.md.
 // Measures: acceptance, throughput (identities/sec on one core), and what a
 // forged score becomes once the device record is 31 / 91 / 181 days old.
 const ROOT = require('path').resolve(__dirname, '..', '..');

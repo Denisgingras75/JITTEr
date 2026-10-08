@@ -58,6 +58,20 @@
  *   Any field may be missing: a missing signal scores 0.5 (neutral). NaN never
  *   comes out. Fewer than 10 flight times gives war null / 'insufficient_data'.
  *
+ * One number everywhere:
+ *   profileFromSession(session)  THE definition of the per-session statistics
+ *                                the scorer reads (every host builds its
+ *                                profile here; biometrics.getProfile() adds
+ *                                its extras on top)
+ *   scoreSession(session)        scoreProfile(profileFromSession(session), session)
+ *   timingFromSession(session)   the `timing` payload a client sends to /attest:
+ *                                the same arrays and counts, bounded, rounded
+ *                                to 0.01 ms, never a character. The client
+ *                                scores this very object and signs its hash,
+ *                                so the server's recompute is exact.
+ *   sanitizeTiming(timing)       what the server accepts: { ok, session } or
+ *                                { ok: false, reason }
+ *
  * Output of scoreProfile():
  *   { war, raw_war, tier, classification, components, flags, timeCap,
  *     paste: { count, chars, weightedChars, alienChars } }
@@ -66,7 +80,7 @@
 var JitterWAR = (function () {
   'use strict'
 
-  var ENGINE_VERSION = '3.1.0'
+  var ENGINE_VERSION = '3.2.0'
 
   // ── Tables ───────────────────────────────────────────────────────────
 
@@ -571,6 +585,175 @@ var JitterWAR = (function () {
     return result
   }
 
+  // ── One profile for every host ───────────────────────────────────────
+
+  var TIMING_VERSION = 1
+  // Windows are the captures' own (biometrics.js, jitter-box.js, jitter-capture.js).
+  var TIMING_LIMITS = {
+    flightTimes:    { max: 100, lo: 20, hi: 2000 },
+    dwellTimes:     { max: 100, lo: 10, hi: 500 },
+    fatigueWindows: { max: 4,   lo: 20, hi: 2000 },
+    pasteLengths:   { max: 100, lo: 1,  hi: 1000000 },
+    perKeyDwells:   { keys: 26, each: 50, lo: 10, hi: 500, key: /^[a-z]$/ },
+    bigramTimings:  { keys: 40, each: 50, lo: 20, hi: 2000, key: /^[a-z]{2}$/ },
+    maxCount: 10000000,
+  }
+  var TIMING_FIELDS = ['v', 'flightTimes', 'dwellTimes', 'fatigueWindows', 'humanChars', 'alienChars',
+    'totalKeystrokes', 'backspaceCount', 'pauseCount', 'pasteCount', 'pasteLengths', 'perKeyDwells', 'bigramTimings']
+
+  // The statistics scoreProfile() reads, from a session's arrays and counts.
+  // Null with fewer than MIN_FLIGHTS flight times.
+  function profileFromSession(session) {
+    session = session || {}
+    var flights = finiteNumbers(session.flightTimes)
+    if (flights.length < MIN_FLIGHTS) return null
+    var dwells = finiteNumbers(session.dwellTimes)
+    var keystrokes = finiteOrNull(session.totalKeystrokes)
+    if (keystrokes === null) keystrokes = finiteOrNull(session.humanChars)
+    keystrokes = Math.max(0, keystrokes || 0)
+    var backspaces = Math.max(0, finiteOrNull(session.backspaceCount) || 0)
+    var pauses = Math.max(0, finiteOrNull(session.pauseCount) || 0)
+
+    var perKey = {}
+    var pk = session.perKeyDwells
+    if (pk && typeof pk === 'object') {
+      var pkKeys = Object.keys(pk)
+      for (var i = 0; i < pkKeys.length; i++) {
+        var times = finiteNumbers(pk[pkKeys[i]])
+        if (times.length >= 2) perKey[pkKeys[i]] = round2(mean(times))
+      }
+    }
+    var bigrams = {}
+    var bt = session.bigramTimings
+    if (bt && typeof bt === 'object') {
+      var bgKeys = Object.keys(bt)
+      for (var j = 0; j < bgKeys.length; j++) {
+        var t = finiteNumbers(bt[bgKeys[j]])
+        if (t.length >= 2) bigrams[bgKeys[j]] = { mean: round2(mean(t)), std: round2(std(t)), n: t.length }
+      }
+    }
+
+    return {
+      mean_inter_key: round2(mean(flights)),
+      std_inter_key: round2(std(flights)),
+      mean_dwell: dwells.length > 0 ? round2(mean(dwells)) : null,
+      std_dwell: dwells.length > 1 ? round2(std(dwells)) : null,
+      per_key_dwell: perKey,
+      bigram_signatures: bigrams,
+      // Typed keystrokes only: pasted text never dilutes the edit ratio.
+      edit_ratio: keystrokes > 0 ? round3(backspaces / (keystrokes + backspaces)) : 0,
+      pause_freq: keystrokes > 0 ? round2(pauses / keystrokes * 100) : 0,   // per 100 keystrokes
+      total_keystrokes: keystrokes,
+      sample_size: flights.length,
+    }
+  }
+
+  function scoreSession(session) {
+    session = session && typeof session === 'object' ? session : {}
+    return scoreProfile(profileFromSession(session), session)
+  }
+
+  // The payload a client attests with. Values outside a capture window are
+  // dropped (not clamped), the newest `max` are kept, and everything is
+  // rounded to 0.01 ms. A client scores THIS object for its badge, so the
+  // server scoring the same bytes gets the same number.
+  function timingFromSession(session) {
+    session = session || {}
+    function series(arr, lim) {
+      var kept = []
+      var nums = finiteNumbers(arr)
+      for (var i = 0; i < nums.length; i++) if (nums[i] >= lim.lo && nums[i] <= lim.hi) kept.push(round2(nums[i]))
+      return kept.slice(Math.max(0, kept.length - lim.max))
+    }
+    function count(v) {
+      var n = finiteOrNull(v)
+      return n === null || n < 0 ? 0 : Math.min(Math.floor(n), TIMING_LIMITS.maxCount)
+    }
+    function map(obj, lim) {
+      var out = {}
+      if (!obj || typeof obj !== 'object') return out
+      var keys = Object.keys(obj).filter(function (k) { return lim.key.test(k) }).sort().slice(0, lim.keys)
+      for (var i = 0; i < keys.length; i++) {
+        var s = series(obj[keys[i]], { max: lim.each, lo: lim.lo, hi: lim.hi })
+        if (s.length) out[keys[i]] = s
+      }
+      return out
+    }
+    var total = session.totalKeystrokes != null ? session.totalKeystrokes : session.humanChars
+    return {
+      v: TIMING_VERSION,
+      flightTimes: series(session.flightTimes, TIMING_LIMITS.flightTimes),
+      dwellTimes: series(session.dwellTimes, TIMING_LIMITS.dwellTimes),
+      fatigueWindows: series(session.fatigueWindows, TIMING_LIMITS.fatigueWindows),
+      humanChars: count(session.humanChars),
+      alienChars: count(session.alienChars),
+      totalKeystrokes: count(total),
+      backspaceCount: count(session.backspaceCount),
+      pauseCount: count(session.pauseCount),
+      pasteCount: count(session.pasteCount),
+      pasteLengths: series(session.pasteLengths, TIMING_LIMITS.pasteLengths).map(Math.floor),
+      perKeyDwells: map(session.perKeyDwells, TIMING_LIMITS.perKeyDwells),
+      bigramTimings: map(session.bigramTimings, TIMING_LIMITS.bigramTimings),
+    }
+  }
+
+  // What a server accepts as a timing payload. Strict on purpose: unknown
+  // fields, non-finite values, values outside the capture windows or more
+  // entries than a capture keeps are refused, never repaired.
+  function sanitizeTiming(timing) {
+    if (!timing || typeof timing !== 'object' || Array.isArray(timing)) return { ok: false, reason: 'not_an_object' }
+    var keys = Object.keys(timing)
+    for (var i = 0; i < keys.length; i++) if (TIMING_FIELDS.indexOf(keys[i]) < 0) return { ok: false, reason: 'unknown_field:' + keys[i] }
+    if (timing.v !== TIMING_VERSION) return { ok: false, reason: 'bad_version' }
+    function series(name, lim) {
+      var arr = timing[name]
+      if (arr === undefined) return []
+      if (!Array.isArray(arr) || arr.length > lim.max) return null
+      for (var k = 0; k < arr.length; k++) if (!isNum(arr[k]) || arr[k] < lim.lo || arr[k] > lim.hi) return null
+      return arr.slice()
+    }
+    function count(name) {
+      var v = timing[name]
+      if (v === undefined) return 0
+      if (!isNum(v) || v < 0 || v > TIMING_LIMITS.maxCount || Math.floor(v) !== v) return null
+      return v
+    }
+    function map(name, lim) {
+      var obj = timing[name]
+      if (obj === undefined) return {}
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
+      var ks = Object.keys(obj)
+      if (ks.length > lim.keys) return null
+      var out = {}
+      for (var m = 0; m < ks.length; m++) {
+        if (!lim.key.test(ks[m])) return null
+        var arr = obj[ks[m]]
+        if (!Array.isArray(arr) || arr.length === 0 || arr.length > lim.each) return null
+        for (var n = 0; n < arr.length; n++) if (!isNum(arr[n]) || arr[n] < lim.lo || arr[n] > lim.hi) return null
+        out[ks[m]] = arr.slice()
+      }
+      return out
+    }
+    var session = {
+      flightTimes: series('flightTimes', TIMING_LIMITS.flightTimes),
+      dwellTimes: series('dwellTimes', TIMING_LIMITS.dwellTimes),
+      fatigueWindows: series('fatigueWindows', TIMING_LIMITS.fatigueWindows),
+      pasteLengths: series('pasteLengths', TIMING_LIMITS.pasteLengths),
+      humanChars: count('humanChars'),
+      alienChars: count('alienChars'),
+      totalKeystrokes: count('totalKeystrokes'),
+      backspaceCount: count('backspaceCount'),
+      pauseCount: count('pauseCount'),
+      pasteCount: count('pasteCount'),
+      perKeyDwells: map('perKeyDwells', TIMING_LIMITS.perKeyDwells),
+      bigramTimings: map('bigramTimings', TIMING_LIMITS.bigramTimings),
+    }
+    var fields = Object.keys(session)
+    for (var f = 0; f < fields.length; f++) if (session[fields[f]] === null) return { ok: false, reason: 'bad_field:' + fields[f] }
+    if (session.pasteLengths.some(function (x) { return Math.floor(x) !== x })) return { ok: false, reason: 'bad_field:pasteLengths' }
+    return { ok: true, session: session }
+  }
+
   // ── Namespace ────────────────────────────────────────────────────────
 
   return {
@@ -588,6 +771,12 @@ var JitterWAR = (function () {
     scoreProfile: scoreProfile,
     scoreCrossSignal: scoreCrossSignal,
     applyTimeCap: applyTimeCap,
+    profileFromSession: profileFromSession,
+    scoreSession: scoreSession,
+    timingFromSession: timingFromSession,
+    sanitizeTiming: sanitizeTiming,
+    TIMING_VERSION: TIMING_VERSION,
+    TIMING_LIMITS: TIMING_LIMITS,
     timeCapFor: timeCapFor,
     accountAgeDays: accountAgeDays,
     weightedPaste: weightedPaste,

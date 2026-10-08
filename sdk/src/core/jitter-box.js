@@ -163,6 +163,7 @@ function attach(el) {
           if (TRACKED_BIGRAMS.has(bigram)) {
             if (!data.bigramTimings[bigram]) data.bigramTimings[bigram] = []
             data.bigramTimings[bigram].push(rawFlight)
+            if (data.bigramTimings[bigram].length > 50) data.bigramTimings[bigram].shift()
           }
         }
 
@@ -333,50 +334,24 @@ function attach(el) {
         ? round2(data.humanChars / total * 100)
         : null
 
-      // Build profile (same shape as getJitterProfile)
-      var perKeyDwell = {}
-      for (var i = 0; i < TRACKED_KEYS.length; i++) {
-        var k = TRACKED_KEYS[i]
-        var times = data.perKeyDwells[k]
-        if (times && times.length >= 2) perKeyDwell[k] = round2(mean(times))
-      }
-
-      var bigramSignatures = {}
-      var bigramKeys = Object.keys(data.bigramTimings)
-      for (var j = 0; j < bigramKeys.length; j++) {
-        var bg = bigramKeys[j]
-        var timings = data.bigramTimings[bg]
-        if (timings.length >= 2) {
-          bigramSignatures[bg] = {
-            mean: round2(mean(timings)),
-            std: round2(std(timings)),
-            n: timings.length,
-          }
-        }
-      }
-
-      var editRatio = data.totalKeystrokes > 0
-        ? round3(data.backspaceCount / (data.totalKeystrokes + data.backspaceCount))
-        : 0
-
-      var pauseFreq = data.totalKeystrokes > 0
-        ? round2(data.pauseCount / data.totalKeystrokes * 100)
-        : 0
-
+      // The scorer's inputs come from the engine's one definition; the SDK
+      // adds what its badge shows (DD times, mouse path).
+      var base = JitterWAR.profileFromSession(data)
+      if (!base) return null
       var profile = {
-        total_keystrokes: data.totalKeystrokes,
-        mean_inter_key: round2(mean(data.flightTimes)),
-        std_inter_key: round2(std(data.flightTimes)),
-        mean_dwell: data.dwellTimes.length > 0 ? round2(mean(data.dwellTimes)) : null,
-        std_dwell: data.dwellTimes.length > 1 ? round2(std(data.dwellTimes)) : null,
+        total_keystrokes: base.total_keystrokes,
+        mean_inter_key: base.mean_inter_key,
+        std_inter_key: base.std_inter_key,
+        mean_dwell: base.mean_dwell,
+        std_dwell: base.std_dwell,
         mean_dd_time: data.ddTimes.length > 0 ? round2(mean(data.ddTimes)) : null,
         std_dd_time: data.ddTimes.length > 1 ? round2(std(data.ddTimes)) : null,
-        per_key_dwell: perKeyDwell,
-        bigram_signatures: bigramSignatures,
-        edit_ratio: editRatio,
-        pause_freq: pauseFreq,
+        per_key_dwell: base.per_key_dwell,
+        bigram_signatures: base.bigram_signatures,
+        edit_ratio: base.edit_ratio,
+        pause_freq: base.pause_freq,
         mouse_path: computeMousePath(data.mousePositions),
-        sample_size: data.flightTimes.length,
+        sample_size: base.sample_size,
       }
 
       var result = JitterWAR.scoreProfile(profile, data)
@@ -432,44 +407,15 @@ function attach(el) {
   }
 }
 
-// ── scoreRaw: build profile from raw capture arrays and score ────────
-// Used by jitter-capture.js (the WGH path). Accepts { flightTimes, dwellTimes,
-// humanChars, alienChars, backspaceCount, pauseCount, pasteCount,
-// pasteLengths? } and returns the engine result.
-
-function insufficientData(captureData) {
-  return {
-    war: null, raw_war: null, tier: null, classification: 'insufficient_data',
-    components: {}, flags: ['too_short'], timeCap: 1.0,
-    paste: JitterWAR.summarizePaste(captureData && typeof captureData === 'object' ? captureData : {}),
-  }
-}
+// ── scoreRaw: score a raw capture (the WGH path) ─────────────────────
+// Used by jitter-capture.js. Accepts the capture arrays and counts
+// ({ flightTimes, dwellTimes, humanChars, alienChars, backspaceCount,
+// pauseCount, pasteCount, pasteLengths?, perKeyDwells?, bigramTimings? })
+// and scores them through the engine's one profile definition, so a capture
+// gets the same number here, in the extension and on the attestation server.
 
 function scoreRaw(captureData) {
-  if (!captureData || typeof captureData !== 'object') return insufficientData(captureData)
-
-  var ft = JitterWAR.finiteNumbers(captureData.flightTimes)
-  if (ft.length < 10) return insufficientData(captureData)
-
-  var dt = JitterWAR.finiteNumbers(captureData.dwellTimes)
-  var humanChars = Math.max(0, JitterWAR.finiteOrNull(captureData.humanChars) || 0)
-  var backspaces = Math.max(0, JitterWAR.finiteOrNull(captureData.backspaceCount) || 0)
-  var pauses = Math.max(0, JitterWAR.finiteOrNull(captureData.pauseCount) || 0)
-
-  var profile = {
-    mean_inter_key: mean(ft),
-    std_inter_key: std(ft),
-    mean_dwell: dt.length > 0 ? mean(dt) : null,
-    std_dwell: dt.length > 0 ? std(dt) : null,
-    // Typed characters only: pasted text must not dilute the edit ratio,
-    // paste is transparent (Hard Rule #5).
-    edit_ratio: humanChars > 0 ? backspaces / humanChars : 0,
-    pause_freq: ft.length > 0 ? pauses / (ft.length / 10) : 0,
-    per_key_dwell: {},
-    bigram_signatures: {},
-  }
-
-  return JitterWAR.scoreProfile(profile, captureData)
+  return JitterWAR.scoreSession(captureData && typeof captureData === 'object' ? captureData : {})
 }
 
 // ── Export ──────────────────────────────────────────────────────────────

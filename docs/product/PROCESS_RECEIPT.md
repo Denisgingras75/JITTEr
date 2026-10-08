@@ -25,7 +25,7 @@ Top-level fields are kept where older verifiers and the attest server expect the
   "title": "Untitled",
   "text_hash": "<sha256 of the final text, normalized as CryptoUtils.textHash>",
   "chars": 4380, "words": 812,
-  "url": "jitter://writer", "minted_at": "<iso>",
+  "url": "jitter://writer", "site_key": "writer", "timing_hash": "<sha256 of the timing payload attested with>", "minted_at": "<iso>",
   "publicKeyJwk": { "kty": "EC", "crv": "P-256", "x": "…", "y": "…" }, "publicKeyId": "<fingerprint>",
   "previousBadge": "<hash of this device's previous receipt or null>",
   "keys": 4120, "war": 0.71, "war_uncapped": 0.71,
@@ -54,6 +54,7 @@ Top-level fields are kept where older verifiers and the attest server expect the
 - `war` is the shared engine's typing-rhythm score (`JitterWAR` via `JitterBio.scoreWAR`); the receipt carries it as one statistic. The engine reads the latest timing samples it keeps (up to 100 keystrokes), not the whole document; the `typing` block above does cover the whole document. `war_uncapped` is the same number (the Writer applies no age cap).
 - Size: typically 5–10 KB for a 5 000-character essay written over a few hours; the timeline caps at 240 buckets, so a receipt never exceeds about 16 KB.
 - Signed with `CryptoUtils.signBadge` over `canonicalJson` of everything except `CryptoUtils.UNSIGNED_FIELDS` (`signature`, `attestation`, `server_signature`, `server_key_id`), exactly as the extension's badges are today, so the attest server, `verify-page.js` and `content.js`'s certificate all keep working.
+- `site_key` and `timing_hash` are inside the signed part. The rhythm score is computed on the timing payload (`JitterWAR.timingFromSession`: bounded timing arrays and counts, never characters) that the Writer sends to the attest server, which recomputes the score with the same engine (`docs/architecture/TRUST_LAYER.md`). The payload is not part of the receipt and the server does not store it.
 
 ## Ledger format (local file, the student's to share)
 

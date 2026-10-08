@@ -34,7 +34,7 @@ serve(async (req) => {
 
   const { data, error } = await supabase
     .from('attestations')
-    .select('war_score, war_client, classification, flags, site_key, created_at, user_id, device_id, time_cap, age_days, server_signature, server_key_id, text_hash, url')
+    .select('war_score, war_server, war_client, classification, flags, site_key, created_at, user_id, device_id, time_cap, age_days, server_signature, server_key_id, text_hash, url')
     .eq('badge_hash', badge_hash.toLowerCase())
     .single()
 
@@ -57,6 +57,7 @@ serve(async (req) => {
         key_id: deviceId ? keyIdFromDeviceId(deviceId) : null,
         site_key: data.site_key,
         war: Number(data.war_score),
+        war_server: data.war_server == null ? null : Number(data.war_server),
         war_client: data.war_client == null ? null : Number(data.war_client),
         time_cap: data.time_cap == null ? null : Number(data.time_cap),
         age_days: data.age_days ?? null,
@@ -158,7 +159,7 @@ function renderPage(data: any, profile: any, errorMsg: string | null): string {
   <h2>JITTEr Badge Verification</h2>
   <p><span class="badge"><span class="dot"></span>${label}</span></p>
   <div style="margin-top:24px">
-    <div class="stat"><span class="label">WAR Score</span><strong>${esc(war)}${data.war_client != null && Number(data.war_client) !== war ? ' (typing score ' + esc(data.war_client) + ', capped by device age)' : ''}</strong></div>
+    <div class="stat"><span class="label">WAR Score</span><strong>${esc(war)}${data.war_server != null && Number(data.war_server) !== war ? ' (typing score ' + esc(data.war_server) + ' as scored by the server, capped by device age)' : ''}${data.war_client != null && data.war_server != null && Math.abs(Number(data.war_client) - Number(data.war_server)) > 0.01 ? ' · the client claimed ' + esc(data.war_client) : ''}</strong></div>
     <div class="stat"><span class="label">Classification</span><strong>${esc(cls)}</strong></div>
     <div class="stat"><span class="label">Platform</span><strong>${esc(String(data.site_key).toUpperCase())}</strong></div>
     <div class="stat"><span class="label">Attested</span><strong>${esc(date)}</strong></div>

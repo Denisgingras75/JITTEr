@@ -73,9 +73,17 @@ test.describe('jitter-capture', () => {
 
     expect(typeof result.war).toBe('number');
     expect(requests.length).toBe(1);
-    const { site_key, badge, signature } = requests[0];
+    const { site_key, badge, signature, timing } = requests[0];
     expect(site_key).toBe('wgh');
+    expect(badge.site_key).toBe('wgh');
     expect(badge.publicKeyJwk).toMatchObject({ kty: 'EC', crv: 'P-256' });
+    // The timing the server scores: bounded arrays and counts, bound to the
+    // signed badge by its hash, never a character of the text.
+    expect(timing).toMatchObject({ v: 1 });
+    expect(timing.flightTimes.length).toBeGreaterThanOrEqual(10);
+    expect(timing.humanChars).toBe(TEXT.length);
+    expect(badge.timing_hash).toBe(await sha256Hex(CryptoUtils.canonicalJson(timing)));
+    expect(JSON.stringify(timing)).not.toContain('review typed');
     expect(badge.keys).toBe(TEXT.length);
     expect(badge.war).toBe(result.war);
     expect(badge.war_uncapped).toBe(result.war);

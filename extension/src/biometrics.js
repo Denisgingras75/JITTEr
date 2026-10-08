@@ -28,6 +28,7 @@ const MIN_BURST_LENGTH = 3;
 const MAX_BURSTS = 50;
 const MOUSE_SAMPLE_INTERVAL = 50;
 const MAX_MOUSE_SAMPLES = 50;
+const MAX_BIGRAM_SAMPLES = 50;   // per bigram, like per-key dwells; the attest payload carries the same window
 
 const TRACKED_KEYS = ['e', 't', 'a', 'o', 'i', 'n', 's', 'r', 'h', 'l'];
 const TRACKED_BIGRAMS = new Set([
@@ -180,6 +181,7 @@ function handleKeydown(session, key, ctrlKey, metaKey, altKey) {
         if (TRACKED_BIGRAMS.has(bigram)) {
           if (!session.bigramTimings[bigram]) session.bigramTimings[bigram] = [];
           session.bigramTimings[bigram].push(rawFlight);
+          if (session.bigramTimings[bigram].length > MAX_BIGRAM_SAMPLES) session.bigramTimings[bigram].shift();
         }
       }
 
@@ -370,43 +372,15 @@ function applyTimeCap(warResult, firstSeenMs) {
 }
 
 // --- FULL BIOMETRIC PROFILE ---
+// The statistics the scorer reads come from the engine's one definition
+// (JitterWAR.profileFromSession); this adds what the extension's badges and
+// receipts show on top (Loki, DD times, bursts, cursor, fatigue, mouse).
 function getProfile(session) {
   const loki = analyzeLoki(session);
   const { flightTimes, dwellTimes, ddTimes, totalKeystrokes, bursts } = session;
 
-  if (flightTimes.length < 10) return null;
-
-  // Per-key dwell averages
-  const perKeyDwell = {};
-  for (const key of TRACKED_KEYS) {
-    const times = session.perKeyDwells[key];
-    if (times && times.length >= 2) {
-      perKeyDwell[key] = round2(calcMean(times));
-    }
-  }
-
-  // Bigram signatures
-  const bigramSignatures = {};
-  for (const bigram of Object.keys(session.bigramTimings)) {
-    const timings = session.bigramTimings[bigram];
-    if (timings.length >= 2) {
-      bigramSignatures[bigram] = {
-        mean: round2(calcMean(timings)),
-        std: round2(calcStd(timings)),
-        n: timings.length,
-      };
-    }
-  }
-
-  // Edit ratio
-  const editRatio = totalKeystrokes > 0
-    ? round3(session.backspaceCount / (totalKeystrokes + session.backspaceCount))
-    : 0;
-
-  // Pause frequency
-  const pauseFreq = totalKeystrokes > 0
-    ? round2((session.pauseCount / totalKeystrokes) * 100)
-    : 0;
+  const base = WarEngine.profileFromSession(session);
+  if (!base) return null;
 
   // Burst analysis
   const avgBurstLength = bursts.length > 0 ? round2(calcMean(bursts)) : 0;
@@ -426,20 +400,18 @@ function getProfile(session) {
     cognitive_ratio: loki.cognitiveRatio,
     entropy: loki.entropy,
     is_bot: loki.isBot,
-    // Timing
-    mean_inter_key: round2(calcMean(flightTimes)),
-    std_inter_key: round2(calcStd(flightTimes)),
-    mean_dwell: dwellTimes.length > 0 ? round2(calcMean(dwellTimes)) : null,
-    std_dwell: dwellTimes.length > 1 ? round2(calcStd(dwellTimes)) : null,
+    // The scorer's inputs (one definition for every host)
+    mean_inter_key: base.mean_inter_key,
+    std_inter_key: base.std_inter_key,
+    mean_dwell: base.mean_dwell,
+    std_dwell: base.std_dwell,
+    per_key_dwell: base.per_key_dwell,
+    bigram_signatures: base.bigram_signatures,
+    edit_ratio: base.edit_ratio,
+    pause_freq: base.pause_freq,
     mean_dd_time: ddTimes.length > 0 ? round2(calcMean(ddTimes)) : null,
     std_dd_time: ddTimes.length > 1 ? round2(calcStd(ddTimes)) : null,
-    // Fingerprint
-    per_key_dwell: perKeyDwell,
-    bigram_signatures: bigramSignatures,
-    // Composition
-    edit_ratio: editRatio,
     pause_count: session.pauseCount,
-    pause_freq: pauseFreq,
     // Bursts
     burst_count: bursts.length,
     avg_burst_length: avgBurstLength,

@@ -3,18 +3,27 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   ageInDays, allowedSiteKeys, canonicalJson, checkIpLimit, classify, corsHeaders, deviceIdFor, fail,
   isP256PublicJwk, json, keyIdFromDeviceId, MAX_ATTESTS_PER_HOUR, MAX_BODY_BYTES, MIN_KEYS_FOR_ATTESTATION,
-  sha256Hex, signEcdsa, timeCapForAge, verifyEcdsa,
+  sha256Hex, signEcdsa, timeCapForAge, verifyEcdsa, WAR_MISMATCH_TOLERANCE,
 } from '../_shared/trust.ts'
+import { JitterWAR } from '../_shared/engine.gen.mjs'
 
 // POST /attest
 //
-// Body: { site_key, badge, signature }
+// Body: { site_key, badge, signature, timing }
 //   site_key  which integration is calling; must be on the allowlist
-//             (JITTER_SITE_KEYS, default extension, writer, wgh)
-//   badge     the payload the client signed (its own device public key is
-//             badge.publicKeyJwk; the score is badge.war; the certified text
-//             is badge.text_hash; where it was minted is badge.url)
+//             (JITTER_SITE_KEYS, default extension, writer, wgh). The badge
+//             carries the same value, signed, so a badge minted for one site
+//             cannot be attested under another.
+//   badge     the payload the client signed: its device public key
+//             (publicKeyJwk), the certified text (text_hash, required), where
+//             it was minted (url), the client's own score (war / war_uncapped,
+//             advisory) and timing_hash = sha256(canonicalJson(timing)).
 //   signature base64 ECDSA P-256 over canonicalJson(badge), by the device key
+//   timing    the capture the score is computed from: timing arrays and
+//             counts, never characters (JitterWAR.timingFromSession). The
+//             server scores it with the same engine the clients run, stores
+//             ITS score and only keeps the client's as a cross-check. The
+//             timing itself is not stored.
 //
 // The signature is the caller's credential: no login, no API key. The server
 // registers the device on first sight, applies the time cap from ITS record
@@ -32,29 +41,47 @@ serve(async (req) => {
   let body: any
   try { body = JSON.parse(text) } catch { return fail(400, 'bad_json') }
 
-  const { site_key, badge, signature } = body ?? {}
+  const { site_key, badge, signature, timing } = body ?? {}
   if (typeof site_key !== 'string' || !/^[a-z0-9_-]{1,40}$/i.test(site_key)) return fail(400, 'bad_site_key')
   if (!allowedSiteKeys().includes(site_key)) return fail(400, 'unknown_site_key')
   if (!badge || typeof badge !== 'object' || typeof signature !== 'string') return fail(400, 'missing_fields', 'badge and signature are required')
+  if (!timing || typeof timing !== 'object') return fail(400, 'missing_timing', 'timing is required: the server scores it')
   if (!isP256PublicJwk(badge.publicKeyJwk)) return fail(400, 'bad_public_key')
   if ('signature' in badge) return fail(400, 'bad_badge', 'badge must not contain its own signature')
+  if (badge.site_key !== site_key) return fail(400, 'site_key_mismatch', 'badge.site_key must equal site_key (it is part of what the device signs)')
+  if (typeof badge.text_hash !== 'string' || !/^[0-9a-f]{64}$/.test(badge.text_hash)) return fail(400, 'bad_text_hash', 'badge.text_hash (sha256 hex of the certified text) is required')
+  if (typeof badge.timing_hash !== 'string' || !/^[0-9a-f]{64}$/.test(badge.timing_hash)) return fail(400, 'bad_timing_hash', 'badge.timing_hash (sha256 hex of canonicalJson(timing)) is required')
+  if (badge.url != null && (typeof badge.url !== 'string' || badge.url.length > 512)) return fail(400, 'bad_url')
 
-  // The typing score the server judges: after the client's penalties, before
-  // the client's own age cap (the server applies its own from its records).
+  // The client's own score: after its penalties, before its age cap. It is a
+  // cross-check only; the server's recompute below is what counts.
   const warClient = typeof badge.war_uncapped === 'number' ? badge.war_uncapped
     : typeof badge.war === 'number' ? badge.war : null
   const keys = typeof badge.keys === 'number' ? badge.keys : 0
   if (warClient == null || !(warClient >= 0 && warClient <= 1)) return fail(400, 'bad_war', 'badge.war must be a number in [0, 1]')
   if (keys < MIN_KEYS_FOR_ATTESTATION) return fail(400, 'insufficient_data', `at least ${MIN_KEYS_FOR_ATTESTATION} keystrokes are needed`)
-  if (badge.text_hash != null && !/^[0-9a-f]{64}$/.test(badge.text_hash)) return fail(400, 'bad_text_hash')
-  if (badge.url != null && (typeof badge.url !== 'string' || badge.url.length > 512)) return fail(400, 'bad_url')
 
   // The device's own signature over the badge.
   if (!(await verifyEcdsa(badge.publicKeyJwk, canonicalJson(badge), signature))) return fail(401, 'bad_signature')
 
+  // The timing is bound to the badge by the signed timing_hash, so a client
+  // cannot sign one capture and send another.
+  if (await sha256Hex(canonicalJson(timing)) !== badge.timing_hash) return fail(400, 'timing_hash_mismatch', 'timing is not what the signed badge was scored on')
+  const sane = JitterWAR.sanitizeTiming(timing)
+  if (!sane.ok) return fail(400, 'bad_timing', sane.reason)
+
+  // The server's score, from the same engine every client runs.
+  const scored = JitterWAR.scoreSession(sane.session)
+  if (typeof scored.war !== 'number') return fail(400, 'insufficient_data', 'fewer than 10 timed keystrokes')
+  const warServer: number = scored.war
+  const flags: string[] = Array.isArray(scored.flags) ? scored.flags.slice(0, 20) : []
+  if (Math.abs(warServer - warClient) > WAR_MISMATCH_TOLERANCE) flags.push('war_mismatch')
+
   const deviceId = await deviceIdFor(badge.publicKeyJwk)
+  // Replay is keyed on what was signed, not on the signature bytes: an ECDSA
+  // signature can be rewritten into a second valid one for the same content.
+  const contentHash = await sha256Hex(canonicalJson(badge))
   const clientSigHash = await sha256Hex(signature)
-  const flags: string[] = Array.isArray(badge.war_flags) ? badge.war_flags.filter((f: unknown) => typeof f === 'string').slice(0, 20) : []
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -70,12 +97,13 @@ serve(async (req) => {
   // reported with the key that countersigned it at the time.
   const { data: existing } = await supabase
     .from('attestations')
-    .select('badge_hash, war_score, classification, time_cap, age_days, created_at, server_signature, server_key_id')
-    .eq('client_sig_hash', clientSigHash)
+    .select('badge_hash, war_score, war_server, classification, time_cap, age_days, created_at, server_signature, server_key_id')
+    .eq('badge_content_hash', contentHash)
     .single()
   if (existing) {
     return json(200, { badge_hash: existing.badge_hash, duplicate: true, attestation: {
       badge_hash: existing.badge_hash, device_id: deviceId, war: Number(existing.war_score),
+      war_server: existing.war_server == null ? null : Number(existing.war_server),
       time_cap: Number(existing.time_cap), age_days: existing.age_days, classification: existing.classification,
       attested_at: existing.created_at, site_key,
     }, server_signature: existing.server_signature ?? null, server_key_id: existing.server_key_id ?? await serverKeyId() })
@@ -91,11 +119,11 @@ serve(async (req) => {
 
   const ageDays = ageInDays(device.first_seen)
   const cap = timeCapForAge(ageDays)
-  const war = Math.round(Math.min(warClient, cap) * 100) / 100
+  const war = Math.round(Math.min(warServer, cap) * 100) / 100
   if (ageDays < 1) flags.push('new_device')
-  const classification = classify(war, warClient, cap, flags)
+  const classification = classify(war, warServer, cap, flags)
   const attestedAt = new Date().toISOString()
-  const badgeHash = await sha256Hex(`${deviceId}:${clientSigHash}`)
+  const badgeHash = await sha256Hex(`${deviceId}:${contentHash}`)
 
   const attestation = {
     badge_hash: badgeHash,
@@ -103,6 +131,7 @@ serve(async (req) => {
     key_id: keyIdFromDeviceId(deviceId),
     site_key,
     war,
+    war_server: warServer,
     war_client: warClient,
     time_cap: cap,
     age_days: ageDays,
@@ -131,6 +160,8 @@ serve(async (req) => {
     text_hash: badge.text_hash ?? null,
     url: badge.url ?? null,
     client_sig_hash: clientSigHash,
+    badge_content_hash: contentHash,
+    war_server: warServer,
     war_client: warClient,
     time_cap: cap,
     age_days: ageDays,

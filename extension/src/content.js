@@ -449,23 +449,27 @@ async function copyBadge(s, isSessionEnd) {
         previousBadgeHash = await CryptoUtils.getPreviousBadgeHash();
     }
 
-    // WAR score
-    const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    // WAR score, computed on the timing payload the server will score, so
+    // the badge's number and the server's recompute are the same number.
+    const timing = JitterBio.WAR.timingFromSession(bioSession);
+    const warResult = profile ? JitterBio.WAR.scoreSession(timing) : null;
     const warUncapped = warResult ? warResult.war : null; // applyTimeCap caps in place
     const cappedWar = warResult ? JitterBio.applyTimeCap(warResult, passport.firstUsed) : null;
 
     const p = {
-        version: '3.0',
+        version: '3.1',
         type: 'content',
         title: 'Verified',
         timestamp: Date.now(),
+        // Who this badge is for and what it was scored on (both signed)
+        site_key: 'extension',
+        timing_hash: await CryptoUtils.hashCanonical(timing),
         // WAR (v3.0)
         war: cappedWar ? cappedWar.war : null,
         war_uncapped: warUncapped, // typing score after penalties, before the client-side age cap
         raw_war: cappedWar ? cappedWar.raw_war : null,
         war_tier: cappedWar ? cappedWar.tier : null,
         time_cap: cappedWar ? cappedWar.timeCap : null,
-        war_components: cappedWar ? cappedWar.components : null,
         war_flags: cappedWar ? cappedWar.flags : null,
         // Legacy (kept for backward compat)
         integrity: integrity,
@@ -489,8 +493,6 @@ async function copyBadge(s, isSessionEnd) {
         avgBurstLength: profile?.avg_burst_length,
         burstVariance: profile?.burst_variance,
         burstCount: profile?.burst_count,
-        fatigueWindows: profile?.fatigue_windows,
-        mousePath: profile?.mouse_path,
         // Passport data
         passport: passport.totalKeystrokes,
         passportLevel: passport.level,
@@ -519,7 +521,7 @@ async function copyBadge(s, isSessionEnd) {
     // countersigns. Adds nothing the device signed over; never blocks the copy.
     let verifyHref = null;
     if (signature) {
-        const res = await CryptoUtils.attest(ATTEST_URL, 'extension', p, signature);
+        const res = await CryptoUtils.attest(ATTEST_URL, 'extension', p, signature, timing);
         if (res) {
             p.attestation = res.attestation;
             p.server_signature = res.server_signature || null;

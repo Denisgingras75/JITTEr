@@ -4,6 +4,8 @@
 
 The question the plan defines as the go/no-go metric: **how many mature, high-trust synthetic personas can one adversary sustain per $1,000 of equipment and monthly operating cost?**
 
+> **Status 2026-10-08.** Tier 1 below is closed: `/attest` now scores the attested timing payload itself and refuses a badge that carries no timing (`missing_timing`); a signed claim of 0.95 on a script's timing is stored as `war_client` 0.95, `war_server` 0, `bot`, flagged `war_mismatch` (`supabase/tests/run.ts` T17). Tier 2 (a generator) is unchanged, and the conclusions of this document stand.
+
 ## Measured (this repository, local functions on PGlite, one CPU core)
 
 Scripts: `lab/adversarial/forge.js` (needs `PORT=54331 npm run dev:functions` running, then `BASE=http://127.0.0.1:54331 node lab/adversarial/forge.js`), `lab/adversarial/persona-cost.js`, `lab/adversarial/distbot.js`.

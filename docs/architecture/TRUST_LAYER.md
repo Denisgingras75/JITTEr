@@ -30,13 +30,22 @@ The device's owner can take everything back: one request signed with the device 
 
 ```json
 { "site_key": "extension",
-  "badge": { "...everything the client signed...", "war": 0.35, "war_uncapped": 0.72, "keys": 148,
-             "text_hash": "<sha256 hex>", "url": "https://site/path", "minted_at": "<iso>",
+  "badge": { "...everything the client signed...", "site_key": "extension",
+             "war": 0.35, "war_uncapped": 0.72, "keys": 148,
+             "text_hash": "<sha256 hex of the certified text>", "url": "https://site/path", "minted_at": "<iso>",
+             "timing_hash": "<sha256 hex of canonicalJson(timing)>",
              "publicKeyJwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." } },
-  "signature": "<base64 ECDSA P-256 r||s over canonicalJson(badge)>" }
+  "signature": "<base64 ECDSA P-256 r||s over canonicalJson(badge)>",
+  "timing": { "v": 1, "flightTimes": [ "…up to 100 ms values…" ], "dwellTimes": [ "…" ], "fatigueWindows": [ "…" ],
+              "humanChars": 148, "alienChars": 0, "totalKeystrokes": 148, "backspaceCount": 9, "pauseCount": 2,
+              "pasteCount": 0, "pasteLengths": [], "perKeyDwells": { "e": [ "…" ] }, "bigramTimings": { "th": [ "…" ] } } }
 ```
 
-Response: `{ badge_hash, attestation: { badge_hash, device_id, key_id, site_key, war, war_client, time_cap, age_days, classification, flags, text_hash, url, attested_at }, server_signature, server_key_id, profile }`.
+Response: `{ badge_hash, attestation: { badge_hash, device_id, key_id, site_key, war, war_server, war_client, time_cap, age_days, classification, flags, text_hash, url, attested_at }, server_signature, server_key_id, profile }`.
+
+- **The server scores the timing itself.** `timing` is what `JitterWAR.timingFromSession()` produces from the capture: the timing arrays and counts the engine reads (bounded: 100 flights, 100 dwells, 50 samples per key and per bigram; values inside the capture windows; rounded to 0.01 ms), never a character. The server validates it (`JitterWAR.sanitizeTiming`), scores it with `supabase/functions/_shared/engine.gen.mjs` (a generated copy of `extension/src/war-score.js`; `node sdk/build.js` regenerates it and `tests/engine-gen.test.js` fails if it drifts) and stores **its** number as `war_server`. The client's `war_uncapped` is kept as `war_client`, a cross-check only: a difference over 0.01 sets the `war_mismatch` flag. The cap and the classification apply to the server's number. The timing payload is discarded after scoring; nothing of it is stored.
+- **The timing is bound to the badge.** `badge.timing_hash` is inside the signed part and must equal `sha256(canonicalJson(timing))`, so a client cannot sign one capture and send another (400 `timing_hash_mismatch`). The client computes its own badge score on the very payload it sends, so an honest client's `war_client` equals `war_server`.
+- `badge.site_key` is inside the signed part and must equal the request's `site_key` (400 `site_key_mismatch`): a badge minted for one site cannot be attested under another. `badge.text_hash` is required (400 `bad_text_hash`): every attestation is bound to a text.
 
 - `site_key` names the integration and must be on the allowlist: `JITTER_SITE_KEYS`, comma-separated, default `extension,writer,wgh`. It is read on every request, so adding a site is a secret change, not a deploy. A key of the right shape that is not on the list gets 400 `unknown_site_key`; a malformed one 400 `bad_site_key`.
 - `canonicalJson` = keys sorted at every depth, no whitespace, `undefined` dropped. Implemented identically in `crypto-utils.js`, `jitter-capture.js` and `_shared/trust.ts`; the backend tests check them against each other.
@@ -44,7 +53,8 @@ Response: `{ badge_hash, attestation: { badge_hash, device_id, key_id, site_key,
 - Classification: `bot` (score < 0.20 or a hard floor), `verified` (capped ≥ 0.80), `building` (new device, decent typing), `suspicious` (the rest).
 - `server_key_id` is the id of the server key that produced `server_signature`: the first 12 hex characters of the SHA-256 of the raw public key, upper-case, the same form as a device's key id. It is stored with the attestation, so a replayed badge reports the key that signed it at the time, whatever the current key is. Verifiers use it to pick the entry in `CryptoUtils.SERVER_PUBLIC_KEYS` (see "Rotating the server key").
 - `GET /functions/v1/verify?hash=…` renders the record; `&format=json` returns it.
-- Errors: `bad_site_key` / `unknown_site_key` 400, `bad_signature` 401, `insufficient_data` (< 20 keys) 400, `rate_limited` (device) 429, `rate_limited_ip` (address) 429, `payload_too_large` (32 KB) 413.
+- Replay is keyed on **what was signed** (`sha256(canonicalJson(badge))`), not on the signature bytes: an ECDSA signature can be rewritten into a second valid signature for the same content (`(r, n−s)`), which must not create a second attestation. Attesting the same badge again, with either signature, returns the stored record.
+- Errors: `bad_site_key` / `unknown_site_key` / `site_key_mismatch` 400, `missing_timing` / `bad_timing_hash` / `timing_hash_mismatch` / `bad_timing` 400, `bad_text_hash` 400, `bad_signature` 401, `insufficient_data` (< 20 keys, or < 10 timed keystrokes) 400, `rate_limited` (device) 429, `rate_limited_ip` (address) 429, `payload_too_large` (64 KB) 413.
 
 The client embeds `attestation`, `server_signature` and `server_key_id` in the badge *outside* the device-signed part; `verify.html` checks the device signature over `CryptoUtils.signedPart(badge)` and the server signature over `attestation`, and that the attestation matches this badge's text hash, device and score.
 
@@ -77,7 +87,7 @@ The count is taken after the checks that cost only CPU (parsing, validation, the
 ## Database
 
 - `devices` — one row per public key: `first_seen` (age), `last_seen`, `attest_count`, `site_keys`.
-- `attestations` — one row per attested badge, with `device_id`, `text_hash`, `url`, `client_sig_hash` (unique: replay guard), `war_client`, `time_cap`, `age_days`, `server_signature`, `server_key_id`.
+- `attestations` — one row per attested badge, with `device_id`, `text_hash`, `url`, `badge_content_hash` (unique: the replay guard, the hash of the signed part), `client_sig_hash`, `war_server` (the server's score before the cap; `war_score` is after it), `war_client`, `time_cap`, `age_days`, `server_signature`, `server_key_id`. Never the timing payload.
 - `profiles` — lifetime aggregates per device, updated atomically by `record_attestation_stats()`.
 - `ip_windows` — `bucket` (the salted hash), `window_start` (the hour), `count`. Maintained by `bump_ip_window(bucket, limit)`, which upserts the current hour's row in one statement and returns whether the count after the increment is within the limit; `prune_ip_windows()` drops rows older than a day.
 - `erase_device(device_id)` deletes a device's attestations, profile and device row in one transaction and returns the three counts.
@@ -122,7 +132,7 @@ Rows from before `server_key_id` existed have it null; on a replay `attest` repo
 ## Known limits
 
 - **One session is weak evidence.** The audit's simulation put humans mostly in "suspicious" and a scorer-aware bot in "verified". Thresholds and ramps were tuned on synthetic data and need real sessions (WGH) before any threshold is trusted. The layers above are what make it expensive anyway: a passing session on a day-0 device caps at 0.35.
-- **The server trusts the client's typing score.** It caps and classifies but does not recompute it. A next step is recomputing WAR server-side from the profile the badge carries (the engine is plain JS; Deno can run it) and flagging mismatches.
+- **The timing is self-reported.** The server now scores it itself, so a signed *claim* of a score is worth nothing (the forge attack in `docs/adversarial/PERSONA_MONTH.md` is refused: `missing_timing`, and a claim on a script's timing scores 0). A *generated* timing still passes: a ~40-line generator sampling human-like values scored ≥ 0.80 in 11 of 24 sessions through the real capture, and the server cannot tell those from fingers. Scarcity needs a trusted capture boundary; see the canon.
 - **A device key is not a person.** Two extensions on one laptop are two devices; one person with two browsers has two histories. That is acceptable for a frictionless start; linking devices is the wallet step below.
 - **The per-address limit trusts the proxy.** The address comes from `x-forwarded-for` as the platform's gateway sets it. If the gateway appends the real address to a header the client sent rather than replacing it, the first entry is the client's to choose and the limit can be dodged by picking a new value: it then bounds careless floods, not deliberate ones. Confirm which it is on the live project and, behind Cloudflare, prefer `cf-connecting-ip`. Many people behind one address (a school, a carrier) share one budget; 600 an hour is meant to be generous for that, and changing it is a secret change, not a deploy.
 

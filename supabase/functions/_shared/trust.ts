@@ -100,21 +100,22 @@ export function ageInDays(firstSeen: string | Date, now = Date.now()): number {
 }
 
 /**
- * The server's verdict. `war` is the client's score after the cap. A new
- * device with a decent raw score is "building", not a bot: the cap is
- * about age, the bot label is about the typing.
+ * The server's verdict. `warCapped` is the server's own score after the cap,
+ * `warRaw` that score before it. A new device with a decent raw score is
+ * "building", not a bot: the cap is about age, the bot label is about the typing.
  */
-export function classify(warCapped: number, warClient: number, cap: number, flags: string[]): string {
-  if (warClient < 0.20 || flags.some(f => /_floor$/.test(f))) return 'bot'
+export function classify(warCapped: number, warRaw: number, cap: number, flags: string[]): string {
+  if (warRaw < 0.20 || flags.some(f => /_floor$/.test(f))) return 'bot'
   if (warCapped >= 0.80) return 'verified'
-  if (cap < 0.80 && warClient >= 0.50) return 'building'
+  if (cap < 0.80 && warRaw >= 0.50) return 'building'
   if (warCapped >= 0.50) return 'suspicious'
   return 'suspicious'
 }
 
 export const MAX_ATTESTS_PER_HOUR = 60
 export const MIN_KEYS_FOR_ATTESTATION = 20
-export const MAX_BODY_BYTES = 32 * 1024
+export const MAX_BODY_BYTES = 64 * 1024      // a badge plus a full timing payload (~20 KB)
+export const WAR_MISMATCH_TOLERANCE = 0.01   // client score vs the server's recompute
 export const MAX_ERASE_BODY_BYTES = 4 * 1024
 export const ERASE_WINDOW_MS = 10 * 60 * 1000
 export const DEFAULT_SITE_KEYS = ['extension', 'writer', 'wgh']

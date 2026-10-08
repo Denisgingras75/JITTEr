@@ -3,9 +3,10 @@
 // deno-lint-ignore-file no-explicit-any
 import { makeDb } from './db.mjs';
 import {
-  canonicalJson, classify, clientAddress, deviceIdFor, isFreshTimestamp, keyIdFromDeviceId, rpcScalar,
+  b64ToBytes, bytesToB64, canonicalJson, classify, clientAddress, deviceIdFor, hex, isFreshTimestamp, keyIdFromDeviceId, rpcScalar,
   sha256Hex, signEcdsa, timeCapForAge, verifyEcdsa,
 } from '../functions/_shared/trust.ts';
+import { JitterWAR } from '../functions/_shared/engine.gen.mjs';
 
 const g = globalThis as any;
 let failed = 0;
@@ -57,16 +58,57 @@ async function makeDevice() {
   const priv = { ...pub, d: jwk.d! };
   return { pub, priv, id: await deviceIdFor(pub) };
 }
-async function signedBadge(dev: any, overrides: Record<string, unknown> = {}) {
+// ── timing payloads the server scores ───────────────────────────────────
+// Deterministic (seeded), so expected scores are reproducible.
+function lcg(seed: number) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+function gauss(rnd: () => number) { const u = Math.max(1e-9, rnd()), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const r2 = (x: number) => Math.round(x * 100) / 100;
+// A strong human session: log-normal flights that slow over the session, two
+// thinking pauses followed by slower keys, dwells that drift with the flights
+// (flow coupling), distinct per-key dwells and bigram timings, edits and pauses.
+function humanTiming(seed = 1) {
+  const rnd = lcg(seed);
+  const flightTimes: number[] = [], dwellTimes: number[] = [];
+  for (let i = 0; i < 100; i++) {
+    const drift = i / 100 * 0.25;
+    let f = Math.exp(Math.log(170) + drift + 0.3 * gauss(rnd));
+    if (i === 30 || i === 60) f = 1500;
+    else if ((i > 30 && i <= 33) || (i > 60 && i <= 63)) f *= 1.6;
+    flightTimes.push(r2(Math.min(2000, Math.max(20, f))));
+    dwellTimes.push(r2(Math.min(500, Math.max(10, 85 + drift * 60 + 22 * gauss(rnd)))));
+  }
+  const perKeyDwells: Record<string, number[]> = {};
+  ['e', 't', 'a', 'o', 'i', 'n', 's', 'r', 'h', 'l'].forEach((k, i) => { perKeyDwells[k] = Array.from({ length: 8 }, () => r2(Math.max(10, 60 + i * 10 + 6 * gauss(rnd)))); });
+  const bigramTimings: Record<string, number[]> = {};
+  ['th', 'he', 'in', 'er', 'an', 're', 'on', 'at'].forEach((b, i) => { bigramTimings[b] = Array.from({ length: 6 }, () => r2(Math.max(20, 120 + i * 20 + 10 * gauss(rnd)))); });
+  return { v: 1, flightTimes, dwellTimes, fatigueWindows: [165, 175, 190, 205],
+    humanChars: 150, alienChars: 0, totalKeystrokes: 150, backspaceCount: 14, pauseCount: 3, pasteCount: 0,
+    pasteLengths: [] as number[], perKeyDwells, bigramTimings };
+}
+// A script's session: a constant 100 ms between keys, 12 ms holds, no edits.
+function botTiming() {
+  return { v: 1, flightTimes: Array(100).fill(100), dwellTimes: Array(100).fill(12), fatigueWindows: [] as number[],
+    humanChars: 150, alienChars: 0, totalKeystrokes: 150, backspaceCount: 0, pauseCount: 0, pasteCount: 0,
+    pasteLengths: [] as number[], perKeyDwells: {}, bigramTimings: {} };
+}
+const HUMAN_WAR: number = JitterWAR.scoreSession(humanTiming()).war;
+
+// A badge as the extension or SDK signs it: the client's score is computed on
+// the very timing payload that goes to the server, whose hash is signed.
+async function signedBadge(dev: any, overrides: Record<string, unknown> = {}, timing: any = humanTiming()) {
+  const scored = JitterWAR.scoreSession(timing);
   const badge = {
-    version: '3.0', type: 'content', war: 0.72, raw_war: 0.75, war_tier: 'All-Star', war_flags: ['no_editing_behavior'],
+    version: '3.1', type: 'content', site_key: 'wgh',
+    war: scored.war, war_uncapped: scored.war, raw_war: scored.raw_war, war_tier: scored.tier, war_flags: scored.flags,
     keys: 150, pastes: 0, pastedChars: 0, integrity: 100,
     text_hash: await sha256Hex('the text that was typed'), url: 'https://example.com/posts/1',
     minted_at: new Date().toISOString() + Math.random(), // unique per badge
-    publicKeyJwk: dev.pub, ...overrides,
+    publicKeyJwk: dev.pub,
+    timing_hash: await sha256Hex(canonicalJson(timing)),
+    ...overrides,
   };
   const signature = await signEcdsa(dev.priv, canonicalJson(badge));
-  return { badge, signature };
+  return { badge, signature, timing };
 }
 // An erase request, signed the way the popup signs it: over { action, publicKeyJwk, requested_at }.
 async function signedErase(dev: any, opts: { requested_at?: string; signer?: any; action?: string } = {}) {
@@ -92,6 +134,11 @@ async function asAnon(sql: string) {
   assert(fixtures.every(f => CryptoUtils.canonicalJson(f) === canonicalJson(f)), 'T0 canonicalJson: server and extension agree on every fixture');
 }
 
+// ── T0b the fixtures: the engine itself scores them as intended ──────────
+assert(HUMAN_WAR >= 0.80, `T0b the human fixture scores at least 0.80 on the engine (got ${HUMAN_WAR}); the tests below rely on it`);
+assert(JitterWAR.scoreSession(botTiming()).war === 0, 'T0b the script fixture hits a hard floor (war 0)');
+assert(JitterWAR.sanitizeTiming(humanTiming()).ok && JitterWAR.sanitizeTiming(botTiming()).ok, 'T0b both fixtures pass the server\'s timing validation');
+
 // ── T1 a signed badge from a new device ─────────────────────────────────
 const dev = await makeDevice();
 const first = await signedBadge(dev);
@@ -99,7 +146,8 @@ const r1 = await attest({ site_key: 'wgh', ...first });
 assert(r1.status === 200, `T1 attest accepts a signed badge (got ${r1.status} ${r1.text.slice(0, 120)})`);
 assert(r1.json?.attestation?.device_id === dev.id, 'T1 device id is the hash of the public key');
 assert(r1.json?.attestation?.age_days === 0 && r1.json?.attestation?.time_cap === 0.35, 'T1 new device: age 0, cap 0.35');
-assert(r1.json?.attestation?.war === 0.35 && r1.json?.attestation?.war_client === 0.72, 'T1 server caps the client score (0.72 -> 0.35)');
+assert(r1.json?.attestation?.war === 0.35 && r1.json?.attestation?.war_server === HUMAN_WAR && r1.json?.attestation?.war_client === HUMAN_WAR,
+  `T1 the server scores the timing itself (${HUMAN_WAR}) and caps it (-> 0.35); the client's claim is kept as war_client`);
 assert(r1.json?.attestation?.classification === 'building', `T1 new device with a good score is "building" (got ${r1.json?.attestation?.classification})`);
 assert(r1.json?.attestation?.flags?.includes('new_device'), 'T1 new_device flag set');
 assert(r1.json?.attestation?.text_hash === first.badge.text_hash && r1.json?.attestation?.url === first.badge.url, 'T1 text hash and url recorded');
@@ -111,15 +159,15 @@ const badgeHash = r1.json?.badge_hash;
 // ── T1b the client's own cap doesn't hide the typing score ──────────────
 {
   const dev2 = await makeDevice();
-  const r = await attest({ site_key: 'extension', ...(await signedBadge(dev2, { war: 0.35, war_uncapped: 0.72 })) });
-  assert(r.status === 200 && r.json?.attestation?.war_client === 0.72 && r.json?.attestation?.classification === 'building',
-    `T1b client-capped badge with war_uncapped 0.72 is "building" (got ${JSON.stringify(r.json?.attestation)})`);
+  const r = await attest({ site_key: 'extension', ...(await signedBadge(dev2, { site_key: 'extension', war: 0.35 })) });
+  assert(r.status === 200 && r.json?.attestation?.war_client === HUMAN_WAR && r.json?.attestation?.classification === 'building',
+    `T1b client-capped badge (war 0.35, war_uncapped ${HUMAN_WAR}) is "building" (got ${JSON.stringify(r.json?.attestation)})`);
 }
 
 // ── T1c a jitter-capture (SDK) badge: no client cap, site's own user ref ─
 {
   const dev3 = await makeDevice();
-  const r = await attest({ site_key: 'wgh', ...(await signedBadge(dev3, { type: 'capture', site_user: 'wgh-user-42', war: 0.66, war_uncapped: 0.66, meta: { pasteCount: 0 } })) });
+  const r = await attest({ site_key: 'wgh', ...(await signedBadge(dev3, { type: 'capture', site_user: 'wgh-user-42', meta: { pasteCount: 0 } })) });
   const row = (await g.__pg.query(`select meta from attestations where badge_hash = $1`, [r.json?.badge_hash])).rows[0];
   assert(r.status === 200 && row?.meta?.site_user === 'wgh-user-42' && r.json?.attestation?.classification === 'building',
     `T1c capture badge attested, site_user kept as an opaque reference (got ${r.status} ${JSON.stringify(row?.meta)})`);
@@ -127,10 +175,10 @@ const badgeHash = r1.json?.badge_hash;
 
 // ── T2 tampering / forgery ──────────────────────────────────────────────
 {
-  const t = await attest({ site_key: 'wgh', badge: { ...first.badge, war: 0.99 }, signature: first.signature });
+  const t = await attest({ site_key: 'wgh', badge: { ...first.badge, war: 0.99 }, signature: first.signature, timing: first.timing });
   assert(t.status === 401 && t.json?.error === 'bad_signature', 'T2 edited badge is rejected (bad_signature)');
   const other = await makeDevice();
-  const forged = await attest({ site_key: 'wgh', badge: first.badge, signature: (await signedBadge(other, { minted_at: first.badge.minted_at })).signature });
+  const forged = await attest({ site_key: 'wgh', badge: first.badge, signature: (await signedBadge(other, { minted_at: first.badge.minted_at })).signature, timing: first.timing });
   assert(forged.status === 401, 'T2 badge signed by a different key than the one it carries is rejected');
   const unsigned = await attest({ user_id: 'someone', site_key: 'wgh', war_score: 1, classification: 'verified' });
   assert(unsigned.status === 400, 'T2 old unsigned contract is rejected');
@@ -161,24 +209,24 @@ const badgeHash = r1.json?.badge_hash;
 {
   await g.__pg.exec(`update devices set first_seen = now() - interval '40 days' where device_id = '${dev.id}'`);
   const r = await attest({ site_key: 'wgh', ...(await signedBadge(dev)) });
-  assert(r.json?.attestation?.age_days === 40 && r.json?.attestation?.time_cap === 0.8 && r.json?.attestation?.war === 0.72, `T5 40-day device: cap 0.80, war 0.72 (got ${JSON.stringify(r.json?.attestation)})`);
+  assert(r.json?.attestation?.age_days === 40 && r.json?.attestation?.time_cap === 0.8 && r.json?.attestation?.war === Math.min(HUMAN_WAR, 0.8), `T5 40-day device: cap 0.80, war ${Math.min(HUMAN_WAR, 0.8)} (got ${JSON.stringify(r.json?.attestation)})`);
   await g.__pg.exec(`update devices set first_seen = now() - interval '400 days' where device_id = '${dev.id}'`);
-  const r2 = await attest({ site_key: 'wgh', ...(await signedBadge(dev, { war: 0.85 })) });
-  assert(r2.json?.attestation?.time_cap === 1 && r2.json?.attestation?.war === 0.85 && r2.json?.attestation?.classification === 'verified', 'T5 400-day device with 0.85 is verified');
-  assert(r2.json?.profile?.badges === 3 && r2.json?.profile?.best_war === 0.85, 'T5 profile aggregates (3 badges, best 0.85)');
-  const bot = await attest({ site_key: 'wgh', ...(await signedBadge(dev, { war: 0.05, war_flags: ['dwell_floor'] })) });
-  assert(bot.json?.attestation?.classification === 'bot', 'T5 a floored score is "bot" whatever the device age');
+  const r2 = await attest({ site_key: 'wgh', ...(await signedBadge(dev)) });
+  assert(r2.json?.attestation?.time_cap === 1 && r2.json?.attestation?.war === HUMAN_WAR && r2.json?.attestation?.classification === 'verified', `T5 400-day device with ${HUMAN_WAR} is verified`);
+  assert(r2.json?.profile?.badges === 3 && r2.json?.profile?.best_war === HUMAN_WAR, `T5 profile aggregates (3 badges, best ${HUMAN_WAR})`);
+  const bot = await attest({ site_key: 'wgh', ...(await signedBadge(dev, {}, botTiming())) });
+  assert(bot.json?.attestation?.classification === 'bot' && bot.json?.attestation?.war === 0, 'T5 a floored session is "bot" whatever the device age');
 }
 
 // ── T6 input validation ─────────────────────────────────────────────────
 {
   const few = await attest({ site_key: 'wgh', ...(await signedBadge(dev, { keys: 5 })) });
   assert(few.status === 400 && few.json?.error === 'insufficient_data', 'T6 fewer than 20 keystrokes is refused');
-  const big = await attest('{"site_key":"wgh","badge":{"x":"' + 'a'.repeat(40000) + '"}}');
+  const big = await attest('{"site_key":"wgh","badge":{"x":"' + 'a'.repeat(70000) + '"}}');
   assert(big.status === 413, 'T6 oversized body is refused');
   const site = await attest({ site_key: 'bad site!', ...(await signedBadge(dev)) });
   assert(site.status === 400 && site.json?.error === 'bad_site_key', 'T6 bad site_key is refused');
-  const nowar = await attest({ site_key: 'wgh', ...(await signedBadge(dev, { war: null })) });
+  const nowar = await attest({ site_key: 'wgh', ...(await signedBadge(dev, { war: null, war_uncapped: null })) });
   assert(nowar.status === 400 && nowar.json?.error === 'bad_war', 'T6 badge without a score is refused');
   const opts = await attestH(new Request(ATTEST, { method: 'OPTIONS' }));
   assert(opts.status === 200 && opts.headers.get('access-control-allow-origin') === '*', 'T6 CORS preflight');
@@ -214,12 +262,12 @@ const badgeHash = r1.json?.badge_hash;
   const r = await attest({ site_key: 'nope', ...(await signedBadge(d)) });
   assert(r.status === 400 && r.json?.error === 'unknown_site_key', 'T10 a well-formed site key that is not on the list is refused (unknown_site_key)');
   Deno.env.set('JITTER_SITE_KEYS', 'wgh, demo');
-  const demo = await attest({ site_key: 'demo', ...(await signedBadge(d)) });
-  const ext = await attest({ site_key: 'extension', ...(await signedBadge(d)) });
+  const demo = await attest({ site_key: 'demo', ...(await signedBadge(d, { site_key: 'demo' })) });
+  const ext = await attest({ site_key: 'extension', ...(await signedBadge(d, { site_key: 'extension' })) });
   assert(demo.status === 200 && ext.status === 400 && ext.json?.error === 'unknown_site_key', 'T10 JITTER_SITE_KEYS replaces the default list and is read per request');
   Deno.env.delete('JITTER_SITE_KEYS');
-  const writer = await attest({ site_key: 'writer', ...(await signedBadge(d)) });
-  const ext2 = await attest({ site_key: 'extension', ...(await signedBadge(d)) });
+  const writer = await attest({ site_key: 'writer', ...(await signedBadge(d, { site_key: 'writer' })) });
+  const ext2 = await attest({ site_key: 'extension', ...(await signedBadge(d, { site_key: 'extension' })) });
   assert(writer.status === 200 && ext2.status === 200, 'T10 the default list is extension, writer, wgh');
 }
 
@@ -307,7 +355,7 @@ const badgeHash = r1.json?.badge_hash;
 // ── T12b erase covers every attestation of the device, whatever the site ─
 {
   const d = await makeDevice();
-  for (const site of ['wgh', 'writer', 'extension']) await attest({ site_key: site, ...(await signedBadge(d)) });
+  for (const site of ['wgh', 'writer', 'extension']) await attest({ site_key: site, ...(await signedBadge(d, { site_key: site })) });
   const r = await erase(await signedErase(d));
   assert(r.status === 200 && JSON.stringify(r.json?.deleted) === JSON.stringify({ attestations: 3, profiles: 1, devices: 1 }), `T12b three attestations on three sites, one profile, one device (got ${JSON.stringify(r.json?.deleted)})`);
 }
@@ -362,6 +410,91 @@ const badgeHash = r1.json?.badge_hash;
   assert(fresh.status === 200 && fresh.json?.server_key_id === newId && newId !== oldId
     && await verifyEcdsa(newPub, canonicalJson(fresh.json.attestation), fresh.json.server_signature), 'T16 new attestations are countersigned with the new key and carry its id');
   Deno.env.set('JITTER_SERVER_KEY_JWK', oldSecret);
+}
+
+// ── T17 the server scores the timing, not the client's claim ────────────
+{
+  const d = await makeDevice();
+  await attest({ site_key: 'wgh', ...(await signedBadge(d)) });
+  await g.__pg.exec(`update devices set first_seen = now() - interval '400 days' where device_id = '${d.id}'`); // no cap: the claims would count
+  const forged = await attest({ site_key: 'wgh', ...(await signedBadge(d, { war: 0.95, war_uncapped: 0.95 }, botTiming())) });
+  const fa = forged.json?.attestation;
+  assert(forged.status === 200 && fa?.classification === 'bot' && fa?.war === 0 && fa?.war_server === 0 && fa?.war_client === 0.95
+    && fa?.flags?.includes('war_mismatch') && fa?.flags?.some((f: string) => /_floor$/.test(f)),
+    `T17 a signed claim of 0.95 on a script's timing is scored 0 and "bot"; the claim is kept as war_client with war_mismatch (got ${JSON.stringify(fa)})`);
+  const inflated = await attest({ site_key: 'wgh', ...(await signedBadge(d, { war: 0.99, war_uncapped: 0.99 })) });
+  const ia = inflated.json?.attestation;
+  assert(ia?.war === HUMAN_WAR && ia?.war_server === HUMAN_WAR && ia?.war_client === 0.99 && ia?.flags?.includes('war_mismatch'),
+    `T17 an inflated claim on real timing gets the server's number (${HUMAN_WAR}) and a war_mismatch flag (got ${JSON.stringify(ia)})`);
+  const honest = await attest({ site_key: 'wgh', ...(await signedBadge(d)) });
+  assert(honest.json?.attestation?.war_server === HUMAN_WAR && !honest.json?.attestation?.flags?.includes('war_mismatch'), 'T17 an honest claim carries no mismatch flag');
+  const j = await verify(`hash=${forged.json?.badge_hash}&format=json`);
+  assert(j.json?.attestation?.war_server === 0 && j.json?.attestation?.war_client === 0.95 && j.json?.attestation?.classification === 'bot', 'T17 /verify reports the server score, the client\'s claim and the verdict');
+  const cols = (await g.__pg.query(`select column_name from information_schema.columns where table_name = 'attestations'`)).rows.map((r: any) => r.column_name);
+  const row = (await g.__pg.query('select meta, flags from attestations where badge_hash = $1', [honest.json?.badge_hash])).rows[0];
+  assert(!cols.includes('timing') && !JSON.stringify(row).includes('flightTimes'), 'T17 the timing payload is scored and discarded, never stored');
+}
+
+// ── T18 the timing is bound to the signed badge ─────────────────────────
+{
+  const d = await makeDevice();
+  const b = await signedBadge(d);
+  const swapped = await attest({ site_key: 'wgh', badge: b.badge, signature: b.signature, timing: humanTiming(2) });
+  assert(swapped.status === 400 && swapped.json?.error === 'timing_hash_mismatch', 'T18 a timing other than the one the badge was signed over is refused');
+  const none = await attest({ site_key: 'wgh', badge: b.badge, signature: b.signature });
+  assert(none.status === 400 && none.json?.error === 'missing_timing', 'T18 timing is required');
+  const outside = await attest({ site_key: 'wgh', ...(await signedBadge(d, {}, { ...humanTiming(), flightTimes: humanTiming().flightTimes.slice(0, 99).concat([5000]) })) });
+  assert(outside.status === 400 && outside.json?.error === 'bad_timing' && /flightTimes/.test(outside.json?.detail), 'T18 a value outside the capture window is refused (bad_timing)');
+  const extra = await attest({ site_key: 'wgh', ...(await signedBadge(d, {}, { ...humanTiming(), text: 'never' })) });
+  assert(extra.status === 400 && extra.json?.error === 'bad_timing' && /unknown_field/.test(extra.json?.detail), 'T18 an unknown timing field is refused');
+  const tooMany = await attest({ site_key: 'wgh', ...(await signedBadge(d, {}, { ...humanTiming(), dwellTimes: Array(101).fill(90) })) });
+  assert(tooMany.status === 400 && tooMany.json?.error === 'bad_timing', 'T18 more samples than a capture keeps are refused');
+  // A client that claims a score over five timed keystrokes (an honest client would have no score to claim)
+  const short = await attest({ site_key: 'wgh', ...(await signedBadge(d, { war: 0.9, war_uncapped: 0.9 }, { ...humanTiming(), flightTimes: humanTiming().flightTimes.slice(0, 5) })) });
+  assert(short.status === 400 && short.json?.error === 'insufficient_data', 'T18 fewer than 10 timed keystrokes is insufficient_data, whatever the claim');
+  const noHash = await signedBadge(d, { timing_hash: undefined });
+  assert((await attest({ site_key: 'wgh', ...noHash })).json?.error === 'bad_timing_hash', 'T18 a badge without a signed timing_hash is refused');
+  const noText = await signedBadge(d, { text_hash: undefined });
+  assert((await attest({ site_key: 'wgh', ...noText })).json?.error === 'bad_text_hash', 'T18 text_hash is required: every attestation is bound to a text');
+  const otherSite = await attest({ site_key: 'writer', ...(await signedBadge(d)) });
+  assert(otherSite.status === 400 && otherSite.json?.error === 'site_key_mismatch', 'T18 a badge signed for wgh cannot be attested as writer');
+  const noSite = await signedBadge(d, { site_key: undefined });
+  assert((await attest({ site_key: 'wgh', ...noSite })).json?.error === 'site_key_mismatch', 'T18 site_key must be inside the signed badge');
+}
+
+// ── T19 a rewritten signature is the same attestation (ECDSA malleability) ─
+{
+  const d = await makeDevice();
+  const b = await signedBadge(d);
+  const first = await attest({ site_key: 'wgh', ...b });
+  const sig = b64ToBytes(b.signature);
+  const n = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+  const s2 = (n - BigInt('0x' + hex(sig.slice(32).buffer as ArrayBuffer))).toString(16).padStart(64, '0');
+  const sig2 = new Uint8Array(64);
+  sig2.set(sig.slice(0, 32), 0);
+  for (let i = 0; i < 32; i++) sig2[32 + i] = parseInt(s2.slice(2 * i, 2 * i + 2), 16);
+  const malleated = bytesToB64(sig2);
+  assert(malleated !== b.signature && await verifyEcdsa(d.pub, canonicalJson(b.badge), malleated), 'T19 (r, n - s) is a second valid signature over the same badge');
+  const again = await attest({ site_key: 'wgh', badge: b.badge, signature: malleated, timing: b.timing });
+  assert(first.status === 200 && again.status === 200 && again.json?.duplicate === true && again.json?.badge_hash === first.json?.badge_hash,
+    `T19 attesting with the rewritten signature returns the same attestation (got ${again.status} ${again.text.slice(0, 100)})`);
+  const count = (await g.__pg.query('select count(*)::int as n from attestations where device_id = $1', [d.id])).rows[0].n;
+  assert(count === 1, 'T19 no second row: replay is keyed on the signed content, not the signature bytes');
+}
+
+// ── T20 parity: the server's number is the engine's number ──────────────
+{
+  const d = await makeDevice();
+  await attest({ site_key: 'wgh', ...(await signedBadge(d)) });
+  await g.__pg.exec(`update devices set first_seen = now() - interval '400 days' where device_id = '${d.id}'`);
+  let mismatches = 0;
+  for (let seed = 10; seed < 40; seed++) {
+    const t = humanTiming(seed);
+    const r = await attest({ site_key: 'wgh', ...(await signedBadge(d, {}, t)) });
+    const expected = JitterWAR.scoreSession(t).war;
+    if (r.status !== 200 || r.json?.attestation?.war_server !== expected || r.json?.attestation?.war !== expected) mismatches++;
+  }
+  assert(mismatches === 0, `T20 30 sessions: war_server equals the engine's scoreSession on the same payload (${mismatches} mismatches)`);
 }
 
 console.log(failed ? `\n${failed} FAILED` : '\nAll backend tests passed.');

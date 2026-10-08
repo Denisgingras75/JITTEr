@@ -261,16 +261,22 @@ const CryptoUtils = {
         }
     },
 
+    // SHA-256 (hex) of the canonical JSON of any value: how a badge binds the
+    // timing payload it is attested with (badge.timing_hash).
+    async hashCanonical(value) {
+        return this.sha256Hex(this.canonicalJson(value));
+    },
+
     // POST a signed badge to the attestation server. Returns the parsed
     // response or null; never throws, never blocks the badge copy.
-    async attest(url, siteKey, badge, signature) {
+    async attest(url, siteKey, badge, signature, timing) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
         try {
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ site_key: siteKey, badge, signature }),
+                body: JSON.stringify({ site_key: siteKey, badge, signature, timing }),
                 signal: controller.signal,
             });
             const data = await res.json().catch(() => null);

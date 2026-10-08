@@ -590,7 +590,10 @@ async function getReceipt() {
     const now = Date.now();
 
     const profile = JitterBio.getProfile(bioSession);
-    const warResult = profile ? JitterBio.scoreWAR(bioSession, profile) : null;
+    // The rhythm score is computed on the timing payload the server will
+    // score, so the receipt's number and the server's recompute are the same.
+    const timingPayload = JitterBio.WAR.timingFromSession(bioSession);
+    const warResult = profile ? JitterBio.WAR.scoreSession(timingPayload) : null;
     const typing = JitterBio.documentTyping(bioSession);
     const war = warResult && typeof warResult.war === 'number' && isFinite(warResult.war) ? warResult.war : 0;
     const totalEdits = (bioSession.humanChars || 0) + (bioSession.backwardEdits || 0);
@@ -620,6 +623,8 @@ async function getReceipt() {
         chars: normalized.length,
         words: wordCount(text),
         url: 'jitter://writer',
+        site_key: 'writer',
+        timing_hash: await CryptoUtils.hashCanonical(timingPayload),
         minted_at: new Date(now).toISOString(),
         publicKeyJwk: publicKeyJwk,
         publicKeyId: publicKeyId,
@@ -645,7 +650,7 @@ async function getReceipt() {
     let verifyHref = null;
     const signature = await CryptoUtils.signBadge(payload);
     if (signature) {
-        const res = await CryptoUtils.attest(ATTEST_URL, 'writer', payload, signature);
+        const res = await CryptoUtils.attest(ATTEST_URL, 'writer', payload, signature, timingPayload);
         if (res) {
             payload.attestation = res.attestation;
             payload.server_signature = res.server_signature || null;

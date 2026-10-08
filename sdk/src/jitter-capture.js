@@ -178,18 +178,13 @@
       }
     }
 
-    var captureData = {
-      flightTimes: s.flightTimes,
-      dwellTimes: s.dwellTimes,
-      humanChars: s.humanChars,
-      alienChars: s.alienChars,
-      pasteLengths: s.pasteLengths,
-      backspaceCount: s.backspaceCount,
-      pauseCount: s.pauseCount,
-    }
-
+    // The timing payload the server will score: bounded, rounded, never a
+    // character. The local score is computed on this very object, so the
+    // server's recompute matches it exactly.
+    var captureData = null
     var result = null
-    if (global.JitterBox && global.JitterBox.scoreRaw) {
+    if (global.JitterBox && global.JitterBox.scoreRaw && global.JitterBox.WAR && global.JitterBox.WAR.timingFromSession) {
+      captureData = global.JitterBox.WAR.timingFromSession(s)
       result = global.JitterBox.scoreRaw(captureData)
     }
 
@@ -211,6 +206,7 @@
       flags: result.flags,
       badge: buildBadge(result),
       meta: buildMeta(s),
+      timing: captureData,
       session: {
         keys: s.humanChars, pastes: s.pasteCount, pastedChars: s.alienChars,
         meanDwell: s.dwellTimes.length ? Math.round(s.dwellTimes.reduce(function(a, b) { return a + b }, 0) / s.dwellTimes.length) : null,
@@ -422,10 +418,13 @@
         url: location.origin + location.pathname,
         minted_at: new Date().toISOString(),
         publicKeyJwk: device.jwk,
+        // The server recomputes the score from result.timing; its hash is
+        // inside the signed part, so the timing is bound to this badge.
+        timing_hash: await sha256Hex(canonicalJson(result.timing)),
         meta: result.meta,
       }
       var signature = await signBadge(badge)
-      result.signed = { badge: badge, signature: signature }
+      result.signed = { badge: badge, signature: signature, timing: result.timing }
 
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null
       var timer = controller ? setTimeout(function() { controller.abort() }, config.timeoutMs) : null
@@ -434,7 +433,7 @@
         res = await fetch(config.attestUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ site_key: config.siteKey, badge: badge, signature: signature }),
+          body: JSON.stringify({ site_key: config.siteKey, badge: badge, signature: signature, timing: result.timing }),
           signal: controller ? controller.signal : undefined,
         })
       } finally {
